@@ -52,6 +52,11 @@ Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
    Fenster ganz den Rohwerten. Wer unten in einer Probenzeile tippt, sieht
    oben dieselbe Probe unterlegt und in den Blick gerollt; die Probe, in der
    von Hand geändert wurde, und jede dadurch bewegte Größe stehen rot.
+   Die Maus auf einer roten Zelle zeigt den alten Wert und „von → auf“.
+
+   Wiederholungen (WDH_UM/WDH_ME über 1) werden mitgeholt und stehen als
+   eigene Zeile da; die Spalten **UM** und **ME** stehen in allen Reitern
+   neben der Probennummer.
 
    Die Erklärtexte stehen hinter den kleinen **i** neben Überschrift und
    Knopfleisten (Maus darauf oder Klick).

@@ -60,7 +60,27 @@ Gut zu wissen:
   * der von Hand geänderte Wert (im Bild GMSZ = 850 bei 26B0005),
   * die Probennummer der geänderten Zeile,
   * jede berechnete Größe, die sich dadurch verschoben hat. Diese Größen stehen oben im Bild sowie im Reiter **Ergebnisse** und im Reiter **Pruefung**.
+* **Maus auf eine rote Zelle** (berechnete Größen oben, Reiter **Ergebnisse**, auch ein geänderter Rohwert) zeigt den **alten Wert** und die Änderung **von → auf** mit der Differenz, dazu den Wert, der im LIMS gebucht ist.
 * **Hellblau unterlegt** ist die Probe, in der gerade getippt wird. Sie ist in allen Tabellen unterlegt und wird oben automatisch in den Blick gerollt.
+
+### Wiederholungen: Spalten UM und ME
+
+Neben der Probennummer stehen in allen Reitern die Spalten **UM** (Wiederholung der Untersuchungsmethode) und **ME** (Wiederholung der Messung) aus der Probentabelle. Die Erstmessung hat 1/1. Wurde eine Probe wiederholt, steht sie mit derselben Probennummer in einer eigenen Zeile, z. B. UM 1 / ME 2. Im Bodenblock, in der Exportübersicht und im Exportbericht heißt diese Zeile `26B0011 1/2`. Eine eingefügte UM trifft die Wiederholung über ihre Spalten UM und Me.
+
+### Wie viele Stellen die Rohwerte zeigen
+
+Die Rohwerttabelle rundet nur die **Anzeige**. Gerechnet und geschrieben wird mit dem vollen Wert, egal ob er aus dem LIMS, aus der eingefügten UM oder von Hand kommt.
+
+| Rohwert | Anzeige |
+|---|---|
+| Variante `_TRDV` | ganze Zahl |
+| `_TSM`, `GBFAnt`, `SKAFoto`, `VOLSZ` | ohne Nachkommastellen |
+| `DichteGB`, `FBLFL` | 2 Nachkommastellen |
+| `TRDFgesch` | 3 Nachkommastellen |
+| Massen (`GMSZ`, `GBM…`, `MSchaufel`, `MMini`) | höchstens 1 Nachkommastelle |
+| alle übrigen | höchstens 4 signifikante Stellen |
+
+Die Stellen vor dem Komma werden nie abgeschnitten: 12345,6 g erscheint als 12346.
 
 ### Tastenkürzel
 

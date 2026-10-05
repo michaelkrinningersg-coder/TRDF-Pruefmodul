@@ -544,10 +544,12 @@ def test_die_pruefmethoden_nehmen_den_stand_der_ergebnisse():
     assert bindungen["serie"] == "2026B051" and bindungen["um_id"] == 261
 
 
-def test_die_ergebnisse_lassen_die_wiederholungen_draussen():
-    """Geprueft wird die Erstmessung - die wollen wir betrachten."""
+def test_die_ergebnisse_bringen_die_wiederholungen_mit():
+    """Wiederholungen (UM/ME ueber 1) kommen mit - mit WDH_UM und WDH_ME,
+    damit die Reiter sie als eigene Zeile zeigen koennen."""
     text, _ = trdf_sql("trdf_ergebnisse", "2026B051", 261)
-    assert "NVL(p.wdh_um, 1) = 1" in text and "NVL(p.wdh_me, 1) = 1" in text
+    assert "NVL(p.wdh_um, 1) = 1" not in text
+    assert "p.wdh_um" in text and "p.wdh_me" in text
     assert "e.mw_roh" in text and "e.mw" in text
 
 
@@ -675,7 +677,7 @@ def test_der_nachtrag_fragt_ueber_die_probennummer():
     # Genommen wird der Gehalt, und nur wo einer steht.
     assert "e.mw IS NOT NULL" in text
     assert "e.mw_roh" not in text
-    # Wiederholungen bleiben draussen - geprueft wird die Erstmessung.
+    # Nachgetragen wird aus der Erstmessung der anderen Anlage.
     assert "NVL(p.wdh_um, 1) = 1" in text
     # Die hoechste PROB_ID zuerst: haben mehrere Anlagen einen
     # Aufschluss, gilt die zuletzt angelegte.
@@ -1322,7 +1324,7 @@ def test_der_anhang_wird_bei_anderer_anlage_nachgefragt() -> None:
     # die Probennummer erreichbar waere.
     assert "a.um_id not in" in text
     assert "TRDF3.1" in str(bindungen.values()).upper()
-    # Wiederholungen bleiben draussen, wie ueberall.
+    # Nachgetragen wird aus der Erstmessung der anderen Anlage.
     assert "nvl(p.wdh_um, 1) = 1" in text
     # Aufsteigend: haben mehrere Anlagen einen Anhang, gilt die
     # zuletzt angelegte - der Aufrufer legt sie der Reihe nach ab.

@@ -101,6 +101,27 @@ def probenschluessel(nummer) -> str:
     return re.sub(r"[\s-]+", "", str(nummer or "")).upper()
 
 
+def wiederholung(wert) -> int:
+    """UM oder ME einer Probe - leer heisst 1, die Erstmessung."""
+    return _ganz(wert)
+
+
+def probenkennung(nummer, wdh_um=1, wdh_me=1) -> str:
+    """Wie eine Probe in den Tabellen heisst - eindeutig auch bei Wiederholungen.
+
+    Dieselbe Probennummer steht im LIMS mehrfach, wenn die
+    Untersuchungsmethode (UM) oder die Messung (ME) wiederholt wurde -
+    jede unter eigener PROB_ID. Die Erstmessung (1/1) heisst wie ihre
+    Nummer; eine Wiederholung traegt UM und ME dahinter: "2023B01944 1/2".
+    Die Spalten UM und ME zeigen dasselbe noch einmal fuer sich.
+    """
+    probe = probenschluessel(nummer)
+    um, me = wiederholung(wdh_um), wiederholung(wdh_me)
+    if um == 1 and me == 1:
+        return probe
+    return f"{probe} {um}/{me}"
+
+
 # --------------------------------------------------------------------------
 # Der eingefuegte Text
 # --------------------------------------------------------------------------

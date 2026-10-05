@@ -121,6 +121,9 @@ FUEHRUNG = {
     "Zeile": "Laufende Nummer im LIMS (LNR)",
     "Probe": "Probennummer",
     "Probe-Nr.": "Probennummer",
+    "UM": "Wiederholung der Untersuchungsmethode (WDH_UM in PROBEN, 1 = "
+          "Erstmessung)",
+    "ME": "Wiederholung der Messung (WDH_ME in PROBEN, 1 = Erstmessung)",
     "Bewertung": "Was auffaellt - sonst leer",
     "Befund": "Was auffaellt - sonst leer",
 }
@@ -452,9 +455,41 @@ def naechste_kopfwahl(eintrag: str) -> str:
     return reihe[(stelle + 1) % len(reihe)]
 
 # Womit eine Tabelle anfaengt, solange niemand etwas anderes gesagt
-# hat: die Zeile, die Probe - und bei den Rohwerten die Variante, denn
-# ohne sie sagt keine Zahl der Zeile etwas.
-STANDARD_FEST = ("Zeile", "Probe", "Probe-Nr.", "_TRDV")
+# hat: die Zeile, die Probe mit UM und ME - und bei den Rohwerten die
+# Variante, denn ohne sie sagt keine Zahl der Zeile etwas.
+STANDARD_FEST = ("Zeile", "Probe", "Probe-Nr.", "UM", "ME", "_TRDV")
+
+# Was neben der Probennummer steht und mit ihr erst die Zeile benennt:
+# dieselbe Nummer kommt bei einer Wiederholung mehrfach vor.
+PROBENSPALTEN = ("Probe", "Probe-Nr.")
+WIEDERHOLUNG = ("UM", "ME")
+
+
+def mit_wiederholung(reihenfolge, fest) -> tuple:
+    """UM und ME gleich hinter die Probe - auch in einer alten Ordnung.
+
+    Wer seine Spalten schon einmal zurechtgezogen hat, hat eine
+    Reihenfolge gespeichert, die UM und ME noch nicht kennt. Neue
+    Spalten wandern sonst ans Ende; diese beiden gehoeren aber zur
+    Probennummer, denn erst mit ihnen ist die Zeile eindeutig. Steht
+    die Probe fest, stehen sie mit fest. Was gespeichert ist, sobald
+    sie einmal in der Legende waren, gilt wieder unveraendert.
+    """
+    reihenfolge, fest = list(reihenfolge or []), list(fest or [])
+    neu = [name for name in WIEDERHOLUNG if name not in reihenfolge]
+    if not neu or not reihenfolge:
+        return reihenfolge, fest
+    # Kennt die Reihenfolge die Probe, kommen sie gleich dahinter; sonst
+    # bleiben sie, wo die Tabelle sie hinstellt - auch das ist hinter
+    # der Probe.
+    probe = next((name for name in PROBENSPALTEN if name in reihenfolge),
+                 None)
+    if probe:
+        stelle = reihenfolge.index(probe) + 1
+        reihenfolge[stelle:stelle] = neu
+    if any(name in fest for name in PROBENSPALTEN):
+        fest += [name for name in neu if name not in fest]
+    return reihenfolge, fest
 
 # Schmal gehalten, damit rechts genug fuer die Beschreibung bleibt -
 # sie ist die einzige Spalte, in der jemand schreibt.

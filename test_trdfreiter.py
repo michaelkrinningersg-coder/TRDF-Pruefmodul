@@ -282,7 +282,8 @@ def test_das_blatt_ist_nach_probennummer_sortiert():
 def test_jede_geprueft_zeile_traegt_werte_und_urteil():
     def pruefen(fenster):
         for zeile in seite(fenster).geprueft():
-            assert set(zeile) == {"lnr", "probe", "werte", "bewertung"}
+            assert set(zeile) == {"lnr", "probe", "werte", "bewertung",
+                                  "nummer", "um", "me"}
             assert isinstance(zeile["bewertung"], list)
     mit_fenster(pruefen)
 
@@ -2276,7 +2277,8 @@ def test_was_gross_getippt_wird_steht_sofort_im_reiter():
         try:
             eingetippt(gross.tabelle, "26B0011", "DichteGB", "2,7")
             assert blatt.rohwert("26B0011", "DichteGB") == "2,7"
-            assert blatt.rohtabelle.wert("26B0011", "DichteGB") == "2,7"
+            # Gezeigt mit zwei Nachkommastellen - die Regel der Dichte.
+            assert blatt.rohtabelle.wert("26B0011", "DichteGB") == "2,70"
             assert blatt.rohtabelle.marke("26B0011",
                                           "DichteGB") == "geaendert"
             # Und die Rechnung ist mitgegangen.
@@ -2293,7 +2295,7 @@ def test_was_im_reiter_geschieht_steht_auch_gross_da():
         gross = blatt._gross_zeigen()
         try:
             blatt._von_hand_geaendert("26B0011", "DichteGB", "2,8")
-            assert gross.tabelle.wert("26B0011", "DichteGB") == "2,8"
+            assert gross.tabelle.wert("26B0011", "DichteGB") == "2,80"
             assert gross.tabelle.marke("26B0011", "DichteGB") == "geaendert"
             # Auch das Aufraeumen der Variante.
             blatt._von_hand_geaendert("26B0011", trdfrohpruefung.VARIANTE,
@@ -2954,8 +2956,9 @@ def test_die_rohwerte_halten_zeile_probe_und_variante_fest():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(5, 11))
         spalten, fest, _koepfe, _alle = blatt._rohspalten()
-        assert fest == ["Zeile", "Probe", trdfrohpruefung.VARIANTE]
-        assert spalten[:3] == ["Zeile", "Probe", trdfrohpruefung.VARIANTE]
+        assert fest == ["Zeile", "Probe", "UM", "ME",
+                        trdfrohpruefung.VARIANTE]
+        assert spalten[:5] == fest
         assert blatt.rohtabelle._fest == fest
         # Die feste Haelfte traegt die Probennummer, die laufende nicht.
         assert "26B0011" in blatt.rohtabelle.festtext.get("1.0", "end")
@@ -2966,15 +2969,17 @@ def test_die_rohwerte_halten_zeile_probe_und_variante_fest():
 def test_die_ergebnisse_halten_zeile_und_probe_fest():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(5, 11))
-        assert blatt.ergebnistabelle._fest == ["Zeile", "Probe"]
-        assert blatt.ergebnistabelle.spalten()[:2] == ["Zeile", "Probe"]
+        assert blatt.ergebnistabelle._fest == ["Zeile", "Probe", "UM", "ME"]
+        assert blatt.ergebnistabelle.spalten()[:4] == ["Zeile", "Probe",
+                                                       "UM", "ME"]
     mit_fenster(pruefen)
 
 
 def test_das_pruefblatt_haelt_zeile_und_probennummer_fest():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(5, 11))
-        assert blatt.pruefungstabelle._fest == ["Zeile", "Probe-Nr."]
+        assert blatt.pruefungstabelle._fest == ["Zeile", "Probe-Nr.", "UM",
+                                                "ME"]
     mit_fenster(pruefen)
 
 
@@ -2984,7 +2989,7 @@ def test_auch_das_grosse_fenster_haelt_sie_fest():
         gross = blatt._gross_zeigen()
         try:
             assert gross.tabelle._fest == blatt.rohtabelle._fest
-            assert gross.tabelle._fest[:3] == ["Zeile", "Probe",
+            assert gross.tabelle._fest[:5] == ["Zeile", "Probe", "UM", "ME",
                                                trdfrohpruefung.VARIANTE]
         finally:
             gross._schliessen()
@@ -3018,8 +3023,10 @@ def test_eine_gespeicherte_reihenfolge_gilt_beim_naechsten_mal():
                 {"reihenfolge": [hinten], "fest": ["Zeile", "Probe"],
                  "kopfspalte": "Spalte"})
             neu, fest, _koepfe, _alle = blatt._rohspalten()
-            assert fest == ["Zeile", "Probe"]
-            assert neu[2] == hinten, neu[:4]
+            # UM und ME kennt die alte Ordnung nicht - sie stehen mit
+            # der Probe fest.
+            assert fest == ["Zeile", "Probe", "UM", "ME"]
+            assert neu[4] == hinten, neu[:6]
             # Und die Tabelle steht schon so da.
             assert blatt.rohtabelle.spalten() == neu
     mit_fenster(pruefen)
@@ -3194,6 +3201,181 @@ def test_zwei_methoden_mit_gleichem_kuerzel_sind_beide_waehlbar() -> None:
     # Das Kuerzel bleibt daneben stehen: gefragt wird mit ihm, und im
     # Kopf des Reiters steht es ohne die Nummer.
     assert [k for _um, k, _text in texte][0] == "TRDF3.2"
+
+
+# --------------------------------------------- Wiederholungen (UM / ME)
+
+def mit_wiederholung(roh, prob_id=11, neu_id=111, um=1, me=2, lnr=12):
+    """Derselbe Abruf mit einer Wiederholung der Probe `prob_id`.
+
+    So steht es im LIMS: dieselbe PROBE_NR unter eigener PROB_ID, mit
+    WDH_UM/WDH_ME, und ihr Teilprobenanhang haengt an ihr.
+    """
+    for zeile in [z for z in roh["ergebnisse"] if z["prob_id"] == prob_id]:
+        roh["ergebnisse"].append({**zeile, "prob_id": neu_id, "lnr": lnr,
+                                  "wdh_um": um, "wdh_me": me})
+    for zeile in [z for z in roh["anhang"] if z["prob_id"] == prob_id]:
+        roh["anhang"].append({**zeile, "prob_id": neu_id,
+                              "probe_nr": "26B0011"})
+    roh["wgh"][neu_id] = roh["wgh"].get(prob_id)
+    return roh
+
+
+def test_die_kennung_haengt_um_und_me_nur_an_wiederholungen():
+    assert trdf.probenkennung("2023B - 01944") == "2023B01944"
+    assert trdf.probenkennung("2023B01944", None, None) == "2023B01944"
+    assert trdf.probenkennung("2023B01944", 1, 2) == "2023B01944 1/2"
+    assert trdf.probenkennung("2023B01944", "2", 1) == "2023B01944 2/1"
+
+
+def test_eine_wiederholung_steht_als_eigene_zeile_mit_um_und_me():
+    def pruefen(fenster):
+        blatt = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                     lambda *a, **k: None,
+                                     ordner=AUSWEICHORDNER)
+        blatt.v_serie.set("2026B051")
+        blatt._uebernehmen(mit_wiederholung(geholt(zeilen=(5, 11))))
+        assert [probe for _lnr, probe in blatt.proben] == [
+            "26B0005", "26B0011", "26B0011 1/2"]
+        for tabelle, spalte in ((blatt.rohtabelle, "Probe"),
+                                (blatt.ergebnistabelle, "Probe"),
+                                (blatt.pruefungstabelle, "Probe-Nr.")):
+            assert "26B0011 1/2" in tabelle.zeilen()
+            # Die Probenspalte zeigt die blosse Nummer, UM und ME daneben.
+            assert tabelle.wert("26B0011 1/2", spalte) == "26B0011"
+            assert tabelle.wert("26B0011 1/2", "UM") == "1"
+            assert tabelle.wert("26B0011 1/2", "ME") == "2"
+            assert tabelle.wert("26B0011", "ME") == "1"
+        # Der Anhang der Wiederholung gehoert zu ihr, nicht zur Erstmessung.
+        assert blatt.anhang[("26B0011 1/2", "DichteGB")]["prob_id"] == 111
+        assert blatt.anhang[("26B0011", "DichteGB")]["prob_id"] == 11
+        # Und eine Korrektur schreibt an ihre eigene Zeile.
+        blatt._von_hand_geaendert("26B0011 1/2", "DichteGB", "2,9")
+        aenderung = [eine for eine in blatt.aenderungen()
+                     if eine["kuerzel"] == "DichteGB"]
+        assert [eine["zeile"]["prob_id"] for eine in aenderung] == [111]
+        # Im Blatt stehen UM und ME als eigene Spalten.
+        zeile = [z for z in blatt.rohblatt() if z["probe"] == "26B0011 1/2"]
+        assert trdfrohpruefung.zeile(zeile[0], blatt.rohliste)[1:4] == [
+            "26B0011", 1, 2]
+    mit_fenster(pruefen)
+
+
+def test_der_eingefuegte_text_trifft_auch_die_wiederholung():
+    def pruefen(fenster):
+        blatt = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                     lambda *a, **k: None,
+                                     ordner=AUSWEICHORDNER)
+        blatt.v_serie.set("2026B051")
+        blatt._uebernehmen(mit_wiederholung(geholt(zeilen=(5, 11))))
+        kopf = "LNR\tText\tProbenummer\tUM\tMe\tFaktor\tDGB lang"
+        blatt._einfuegetext = "\n".join([
+            "Serie\t2026B051", "Untersuchungsmethode\tTRDF3.2", "1",
+            kopf, "\t\t\t\t\t\tg/cm3",
+            "1\t\t26B - 0011\t1\t1\t\t2,5",
+            "2\t\t26B - 0011\t1\t2\t\t2,6"])
+        blatt.rohnamen = {"DGB lang": "DichteGB"}
+        assert blatt._text_uebernehmen()
+        assert blatt.eingefuegt["26B0011"] == {"DichteGB": "2,5"}
+        assert blatt.eingefuegt["26B0011 1/2"] == {"DichteGB": "2,6"}
+    mit_fenster(pruefen)
+
+
+def test_alte_spaltenordnung_bekommt_um_und_me_hinter_die_probe():
+    reihenfolge, fest = trdflegende.mit_wiederholung(
+        ["Zeile", "Probe", "_TSM"], ["Zeile", "Probe"])
+    assert reihenfolge == ["Zeile", "Probe", "UM", "ME", "_TSM"]
+    assert fest == ["Zeile", "Probe", "UM", "ME"]
+    # Kennt die Ordnung sie schon, bleibt sie, wie sie gespeichert ist.
+    assert trdflegende.mit_wiederholung(
+        ["Zeile", "Probe", "_TSM", "UM", "ME"], ["Zeile", "Probe"]) == (
+        ["Zeile", "Probe", "_TSM", "UM", "ME"], ["Zeile", "Probe"])
+
+
+# ------------------------------------------- Hinweis ueber roten Zellen
+
+def test_ueber_einer_bewegten_groesse_steht_der_alte_wert():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        blatt._berechnete_umschalten(merken=False)
+        kuerzel = "FBVb"        # der Vorrat steht auf der Grobbodendichte
+        assert blatt.ergebnishinweis("26B0011", f"{kuerzel} ber.") is None
+        vorher = blatt.gerechnet("26B0011").get(kuerzel)
+        blatt._von_hand_geaendert("26B0011", "DichteGB", "2,9")
+        assert kuerzel in blatt.bewegt("26B0011")
+        nachher = blatt.gerechnet("26B0011").get(kuerzel)
+        stellen = trdfpruefung.stellen_fuer(kuerzel, trdfreiter.STELLEN)
+        alt = trdfreiter.zahltext(vorher, stellen)
+        neu = trdfreiter.zahltext(nachher, stellen)
+        for spalte in (f"{kuerzel} ber.", f"{kuerzel} LIMS"):
+            text = blatt.ergebnishinweis("26B0011", spalte)
+            assert text.startswith(f"Alter Wert: {alt}"), text
+            assert f"Geaendert von {alt} auf {neu}" in text, text
+            assert "Im LIMS gebucht:" in text
+        # Oben (eingeblendet) und im Reiter Ergebnisse dieselbe Quelle.
+        assert blatt.berechnete_offen()
+        for tabelle in blatt.ergebnistabellen:
+            assert tabelle._zellquelle == blatt.ergebnishinweis
+        # Eine unbewegte Probe hat keinen Hinweis.
+        assert blatt.ergebnishinweis("26B0005", f"{kuerzel} ber.") is None
+    mit_fenster(pruefen)
+
+
+def test_ueber_einem_geaenderten_rohwert_steht_der_alte_wert():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        alt = trdfreiter.rohtext("DichteGB",
+                                 blatt.rohwert("26B0011", "DichteGB"))
+        assert blatt.rohhinweis("26B0011", "DichteGB") is None
+        blatt._von_hand_geaendert("26B0011", "DichteGB", "2,9")
+        text = blatt.rohhinweis("26B0011", "DichteGB")
+        assert text.startswith(f"Alter Wert: {alt}"), text
+        assert f"Geaendert von {alt} auf 2,90" in text, text
+    mit_fenster(pruefen)
+
+
+# ------------------------------------------------ Stellen der Rohwerte
+
+def test_rohwerte_zeigen_ihre_stellen():
+    rt = trdfreiter.rohtext
+    assert rt("_TRDV", "1,0") == "1"
+    assert rt("_TSM", "12,6") == "13"
+    assert rt("DichteGB", "2,6") == "2,60"
+    assert rt("DichteGB", "2,6549") == "2,65"
+    assert rt("GBFAnt", "12,4") == "12"
+    assert rt("FBLFL", "1,2345") == "1,23"
+    assert rt("SKAFoto", "7,5") == "8"
+    assert rt("TRDFgesch", "1,23456") == "1,235"
+    assert rt("VOLSZ", "250,4") == "250"
+    # Massen: hoechstens eine Nachkommastelle, vor dem Komma alles.
+    assert rt("GMSZ", "123,456") == "123,5"
+    assert rt("GBM63Schaufel", "1234,56") == "1235"
+    assert rt("MSchaufel", "12345,67") == "12346"
+    assert rt("MMini", "12,34") == "12,3"
+    # Sonst hoechstens vier signifikante Stellen.
+    assert rt("VOLMiniSZ", "98,7654") == "98,77"
+    assert rt("VOLMiniSZ", "0,0123456") == "0,01235"
+    assert rt("VOLMiniSZ", "12345,6") == "12346"
+    assert rt("VOLMiniSZ", "5") == "5"
+    assert rt("VOLMiniSZ", "0") == "0"
+    # Was keine Zahl ist, bleibt; leer wird x.
+    assert rt("DichteGB", "x") == "x"
+    assert rt("DichteGB", "") == trdf.MARKE
+    assert rt("DichteGB", None) == trdf.MARKE
+    assert rt("DichteGB", "##1093") == "##1093"
+
+
+def test_die_rohtabelle_rundet_auch_die_eingefuegte_um():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        blatt.eingefuegt = {"26B0011": {"DichteGB": "2,65432"}}
+        blatt._quelle_bestimmen()
+        blatt._rechnung_vergessen()
+        blatt._zeigen()
+        assert blatt.rohtabelle.wert("26B0011", "DichteGB") == "2,65"
+        # Gerechnet wird mit dem vollen Wert.
+        assert blatt.rohwert("26B0011", "DichteGB") == "2,65432"
+    mit_fenster(pruefen)
 
 
 def main() -> int:

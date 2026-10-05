@@ -1076,7 +1076,10 @@ def trdf_ergebnisse(zugang, serie: str, um_id, verbindung=None,
                     proben=None) -> list[dict]:
     """Was das LIMS zu dieser Serie gebucht hat - Rohwerte und Gerechnetes.
 
-    Wiederholungen bleiben draussen: geprueft wird die Erstmessung.
+    Wiederholungen kommen mit: dieselbe Probennummer unter einer
+    anderen PROB_ID, mit WDH_UM oder WDH_ME ueber 1. Sie stehen in den
+    Reitern als eigene Zeile, mit UM und ME in eigenen Spalten - wer nur
+    die Erstmessung saehe, wuesste nicht, dass es die zweite gibt.
 
     Mitgelesen wird der ganze Schluessel der Zeile - UM_ID und GEGR_ID
     gehoeren dazu - und ihr Bearbeitungsstand. Beides braucht der
@@ -1101,8 +1104,7 @@ def trdf_ergebnisse(zugang, serie: str, um_id, verbindung=None,
           FROM ergebnisse e
           JOIN proben p ON p.id = e.prob_id
          WHERE {wo} AND e.um_id = :um_id
-           AND NVL(p.wdh_um, 1) = 1 AND NVL(p.wdh_me, 1) = 1
-         ORDER BY e.lnr, p.probe_nr, e.pm_id
+         ORDER BY e.lnr, p.probe_nr, p.wdh_um, p.wdh_me, e.pm_id
     """, bindungen, verbindung=verbindung)
     return _dicts(zeilen, TRDF_ERGEBNIS_FELDER)
 

@@ -269,14 +269,16 @@ def bewertungstext(saetze) -> str:
 # Das Arbeitsblatt
 # --------------------------------------------------------------------------
 # Die Spalten in der Reihenfolge, in der sie gelesen werden: erst die
-# Probe, dann die drei Skelettanteile mit dem, woraus sie kommen, dann
-# der Vorrat und die Dichte, zuletzt der Aufschluss und das Urteil.
-SPALTEN = ("Zeile", "Probe-Nr.", "Skelettanteil", "SKA63", "SKAgs63",
+# Probe mit UM und ME, dann die drei Skelettanteile mit dem, woraus sie
+# kommen, dann der Vorrat und die Dichte, zuletzt der Aufschluss und das
+# Urteil.
+SPALTEN = ("Zeile", "Probe-Nr.", "UM", "ME", "Skelettanteil", "SKA63",
+           "SKAgs63",
            "Faktor B/F", "GBFAnt63gs", "FBVorrat", "TRDF", "Cges", "CO3",
            "Bewertung")
 
 # Welche Spalte welches Formelkuerzel zeigt. Was hier nicht steht -
-# Zeile, Probe und die Bewertung - wird nicht gerechnet.
+# Zeile, Probe, UM, ME und die Bewertung - wird nicht gerechnet.
 QUELLEN = {"Skelettanteil": SKA, "SKA63": SKA_GEMESSEN,
            "SKAgs63": SKA_GESCHAETZT, "Faktor B/F": FAKTOR,
            "GBFAnt63gs": GBFANT, "FBVorrat": VORRAT, "TRDF": TRDF,
@@ -328,11 +330,13 @@ def zeile(probe: dict) -> list:
     """Eine Zeile des Blattes aus einer geprueften Probe.
 
     `probe` traegt "lnr", "probe", die Zahlen unter ihren Formelkuerzeln
-    und die Bewertung.
+    und die Bewertung; bei einer Wiederholung dazu "nummer", "um" und
+    "me" - ohne sie ist es die Erstmessung unter ihrer Nummer.
     """
     werte = probe.get("werte", {})
-    zeilen = [probe.get("lnr", ""), probe.get("probe", "")]
-    for name in SPALTEN[2:-1]:
+    zeilen = [probe.get("lnr", ""), probe.get("nummer", probe.get("probe", "")),
+              probe.get("um", 1), probe.get("me", 1)]
+    for name in SPALTEN[4:-1]:
         kuerzel = QUELLEN[name]
         zeilen.append(gerundet(werte.get(kuerzel), stellen_fuer(kuerzel)))
     zeilen.append(bewertungstext(probe.get("bewertung", ())))

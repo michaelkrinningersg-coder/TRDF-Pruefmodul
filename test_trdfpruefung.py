@@ -299,9 +299,9 @@ def test_fremde_pruefungen_lassen_sich_dazustellen():
 # ------------------------------------------------------------ Das Blatt
 
 def test_die_spalten_stehen_in_der_reihenfolge_des_pruefplans():
-    assert pruefung.SPALTEN[:2] == ("Zeile", "Probe-Nr.")
+    assert pruefung.SPALTEN[:4] == ("Zeile", "Probe-Nr.", "UM", "ME")
     assert pruefung.SPALTEN[-1] == "Bewertung"
-    for name in pruefung.SPALTEN[2:-1]:
+    for name in pruefung.SPALTEN[4:-1]:
         assert name in pruefung.QUELLEN
 
 

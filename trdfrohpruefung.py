@@ -428,13 +428,15 @@ BLOCK = "Pruefung der Rohwerte"
 
 
 def spalten(rohliste) -> list:
-    return ["Zeile", "Probe-Nr.", "Variante"] + list(rohliste) + \
+    return ["Zeile", "Probe-Nr.", "UM", "ME", "Variante"] + list(rohliste) + \
         ["WGH", BEWERTUNGSSPALTE]
 
 
 def zeile(probe: dict, rohliste) -> list:
     werte = probe.get("werte", {})
-    gefunden = [probe.get("lnr", ""), probe.get("probe", ""),
+    gefunden = [probe.get("lnr", ""),
+                probe.get("nummer", probe.get("probe", "")),
+                probe.get("um", 1), probe.get("me", 1),
                 werte.get(VARIANTE, trdf.MARKE)]
     for name in rohliste:
         wert = werte.get(name)

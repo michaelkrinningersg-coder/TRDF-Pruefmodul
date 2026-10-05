@@ -55,6 +55,7 @@ einer Sicherung (trdfexport.py).
 from __future__ import annotations
 
 import datetime as dt
+import decimal
 import os
 import textwrap
 import tkinter as tk
@@ -134,7 +135,8 @@ ROHWERTE_UNVOLLSTAENDIG = "Rohwerte unvollstaendig"
 # Wie breit die Spalten des Pruefblattes stehen. Die Kopfzeile traegt
 # den Parameternamen; wird sie abgeschnitten, ist die Spalte nicht mehr
 # zu erkennen - deshalb steht die Breite hier und nicht auf Vorgabe.
-BREITEN = {"Zeile": 56, "Probe-Nr.": 104, "Skelettanteil": 104,
+BREITEN = {"Zeile": 56, "Probe-Nr.": 104, "UM": 40, "ME": 40,
+           "Skelettanteil": 104,
            "SKA63": 88, "SKAgs63": 88, "Faktor B/F": 80,
            "GBFAnt63gs": 104, "FBVorrat": 100, "TRDF": 88, "Cges": 84,
            "CO3": 84, "Bewertung": 320}
@@ -181,6 +183,17 @@ def _nachtragsteil(geholt) -> dict:
     """Das Ergebnis von `_nachtrag_holen` als Eintraege des Abrufs."""
     liste, fehler = geholt
     return {"aufschlussnachtrag": liste, "nachtragsfehler": fehler}
+
+
+def _kennung(zeile) -> str:
+    """Die Zeilenkennung einer Ergebniszeile - mit UM/ME bei Wiederholungen."""
+    return trdf.probenkennung(zeile.get("probe_nr"), zeile.get("wdh_um"),
+                              zeile.get("wdh_me"))
+
+
+def _kennungen(ergebnisse) -> dict:
+    """PROB_ID -> Zeilenkennung, ueber alle Ergebniszeilen eines Abrufs."""
+    return {zeile["prob_id"]: _kennung(zeile) for zeile in ergebnisse or ()}
 
 
 def _probenkennungen(ergebnisse) -> list:
@@ -295,6 +308,87 @@ def zahltext(wert, stellen=STELLEN) -> str:
         return trdf.MARKE if wert == trdf.MARKE else str(wert or "")
     gerundet = wert.quantize(trdf.D(1).scaleb(-stellen))
     return str(gerundet).replace(".", ",")
+
+
+# Wie ein Rohwert in der Tabelle dasteht - nur die Anzeige: gerechnet,
+# verglichen und geschrieben wird mit dem vollen Wert. Ohne eigene Regel
+# hoechstens vier signifikante Stellen; die Stellen vor dem Komma werden
+# nie abgeschnitten (12345,6 zeigt 12346). Geschluesselt ist auf das
+# Formelkuerzel ohne fuehrenden Unterstrich, gross geschrieben.
+SIGNIFIKANT = 4
+ROH_STELLEN = {
+    "TRDV": 0,          # Variante - immer eine ganze Zahl
+    "TSM": 0,           # Tiefenstufenmaechtigkeit
+    "DICHTEGB": 2,      # Dichte Grobboden
+    "GBFANT": 0,        # Grobbodenflaechenanteil
+    "FBLFL": 2,         # Faktor Bergland/Flachland
+    "SKAFOTO": 0,       # Skelettanteil aus dem Foto
+    "TRDFGESCH": 3,     # Trockenrohdichte geschaetzt
+    "VOLSZ": 0,         # Volumen Stechzylinder
+}
+# Die Massen: hoechstens eine Nachkommastelle.
+MASSEN = ("GMSZ", "GBM", "MSCHAUFEL", "MMINI")
+MASSE_STELLEN = 1
+
+
+def _ohne_nullen(text: str) -> str:
+    """Nullen am Ende der Nachkommastellen weg - und das Komma, wenn nichts bleibt."""
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def rohtext(kuerzel, wert) -> str:
+    """Ein Rohwert fuer die Tabelle - gerundet nach seiner Regel.
+
+    Was keine Zahl ist - ein x, ein Verweis wie "##1093" -, bleibt wie
+    es ist; leer wird zum x. Ob der Wert aus dem LIMS, aus der
+    eingefuegten UM oder von Hand kommt, ist gleich.
+    """
+    zahl = trdf.zahl(wert)
+    if zahl is None:
+        text = str(wert if wert is not None else "").strip()
+        return text or trdf.MARKE
+    name = str(kuerzel or "").lstrip("_").upper()
+    if name in ROH_STELLEN:
+        stellen, fest = ROH_STELLEN[name], True
+    else:
+        stellen = 0 if zahl.is_zero() else \
+            max(0, SIGNIFIKANT - 1 - zahl.adjusted())
+        if name.startswith(MASSEN):
+            stellen = min(stellen, MASSE_STELLEN)
+        fest = False
+    try:
+        gerundet = zahl.quantize(trdf.D(1).scaleb(-stellen),
+                                 rounding=decimal.ROUND_HALF_UP)
+    except decimal.InvalidOperation:
+        return str(wert).strip()
+    text = format(gerundet, "f")
+    if not fest:
+        text = _ohne_nullen(text)
+    if text in ("-0", "-0.0", "-0.00", "-0.000"):
+        text = text[1:]
+    return text.replace(".", ",")
+
+
+def _differenz(alt, neu, stellen=None) -> str:
+    """Wie weit sich ein Wert bewegt hat - mit Vorzeichen, "" ohne zwei Zahlen."""
+    if not isinstance(alt, trdf.D) or not isinstance(neu, trdf.D):
+        return ""
+    unterschied = neu - alt
+    text = zahltext(unterschied, stellen) if stellen is not None else \
+        rohtext("", unterschied)
+    return text if text.startswith("-") else f"+{text}"
+
+
+def aenderungstext(alt: str, neu: str, differenz="", im_lims=None) -> str:
+    """Der Hinweis ueber einer roten Zelle: alter Wert und von -> auf."""
+    zeilen = [f"Alter Wert: {alt}",
+              f"Geaendert von {alt} auf {neu}"
+              + (f"  ({differenz})" if differenz else "")]
+    if im_lims is not None:
+        zeilen.append(f"Im LIMS gebucht: {im_lims}")
+    return "\n".join(zeilen)
 
 
 def erklaerung(*saetze) -> str:
@@ -414,7 +508,8 @@ class TrdfSeite(tk.Frame):
         self.bloecke = {}            # probe -> offenes Blockfenster
         self._mit_hand = {}          # gemerkte Rechnungen, mit Handwerten
         self._ohne_hand = {}         # dieselben ohne sie
-        self.proben = []             # (lnr, probennummer)
+        self.proben = []             # (lnr, probe)
+        self.wiederholungen = {}     # probe -> (Probennummer, UM, ME)
         self.arbeitszeile = None     # die Probe, in der gerade getippt wird
         self.letzter_export = None   # der Bericht des letzten Schreibwegs
 
@@ -968,7 +1063,7 @@ class TrdfSeite(tk.Frame):
         fest = (konfig.get("trdf_fest") or {}).get(blatt)
         if fest is None:
             fest = trdflegende.STANDARD_FEST
-        return list(reihenfolge), list(fest)
+        return trdflegende.mit_wiederholung(reihenfolge, fest)
 
     def kopfspalte(self) -> str:
         """Was in der Kopfzeile steht - das Kuerzel, der Name, die Einheit."""
@@ -1386,11 +1481,15 @@ class TrdfSeite(tk.Frame):
                    for m in self.methoden}
         gesehen = {}
         for zeile in geholt["ergebnisse"]:
-            probe = trdf.probenschluessel(zeile["probe_nr"])
+            probe = _kennung(zeile)
             kuerzel = nach_pm.get((zeile["pm_id"], zeile["pm_ver"]))
             if kuerzel is None:
                 continue
             gesehen.setdefault(probe, zeile["lnr"])
+            self.wiederholungen.setdefault(probe, (
+                trdf.probenschluessel(zeile["probe_nr"]),
+                trdf.wiederholung(zeile.get("wdh_um")),
+                trdf.wiederholung(zeile.get("wdh_me"))))
             eimer = self.gebucht if self.formeln.get(kuerzel) else self.limsroh
             eimer.setdefault(probe, {})[kuerzel] = zeile["mw_roh"]
             # Die Zeile selbst wird aufgehoben: ohne ihren vollen
@@ -1477,15 +1576,16 @@ class TrdfSeite(tk.Frame):
         heraus: die Rohwerte standen im LIMS, im Reiter stand nichts,
         und keine Meldung sagte warum.
 
-        Die PROB_ID bleibt der zweite Weg - fuer die Zeilen, die ihre
-        Probennummer nicht mitbringen.
+        Ist es aber die PROB_ID einer Zeile dieser Serie, gilt sie: eine
+        Wiederholung (UM/ME) traegt dieselbe Probennummer wie die
+        Erstmessung, und ihr Anhang gehoert zu ihr und nicht zu jener.
+        Was nur ueber die Nummer kommt, gehoert zur Erstmessung.
         """
-        nummern = {zeile["prob_id"]: trdf.probenschluessel(zeile["probe_nr"])
-                   for zeile in geholt["ergebnisse"]}
+        nummern = _kennungen(geholt["ergebnisse"])
         bekannt = set(nummern.values())
         for zeile in geholt.get("anhang", ()):
-            probe = (trdf.probenschluessel(zeile.get("probe_nr"))
-                     or nummern.get(zeile["prob_id"]))
+            probe = (nummern.get(zeile.get("prob_id"))
+                     or trdf.probenschluessel(zeile.get("probe_nr")))
             kuerzel = self._formelkuerzel(zeile["formelkuerzel"])
             # Nur zu Proben, die auch in der Tabelle stehen: eine
             # Nummer, die der Abruf nicht gebracht hat, gehoert nicht
@@ -1495,8 +1595,7 @@ class TrdfSeite(tk.Frame):
 
     def _wgh_zuordnen(self, geholt):
         """Wiederfindungsgrad und Aufschluss haengen an der PROB_ID."""
-        nummern = {zeile["prob_id"]: trdf.probenschluessel(zeile["probe_nr"])
-                   for zeile in geholt["ergebnisse"]}
+        nummern = _kennungen(geholt["ergebnisse"])
         for prob_id, wert in geholt["wgh"].items():
             probe = nummern.get(prob_id)
             if probe:
@@ -1522,25 +1621,75 @@ class TrdfSeite(tk.Frame):
         verschiedener Anlagen derselben Nummer ist nicht dieselbe Zahl,
         und welche gilt, entscheidet nicht die Reihenfolge einer
         Abfrage.
+
+        Ein Nachtrag gilt fuer jede Zeile dieser Nummer - auch fuer die
+        Wiederholungen (UM/ME): der Aufschluss gehoert zur Probe und
+        nicht zur Messung.
         """
+        je_nummer = {}
+        for probe in eigene:
+            nummer = self.wiederholungen.get(probe, (probe,))[0]
+            je_nummer.setdefault(nummer, []).append(probe)
         for eintrag in geholt.get("aufschlussnachtrag") or []:
-            probe = trdf.probenschluessel(eintrag.get("probe_nr"))
+            nummer = trdf.probenschluessel(eintrag.get("probe_nr"))
             name = trdf.ATNULL_PARAMETER.get(eintrag.get("para_id"))
-            if not name or probe not in eigene:
+            if not name:
                 continue
-            if str(self.aufschluss.get(probe, {}).get(name) or "").strip():
-                continue
-            if (probe, name) in self.aufschlussherkunft:
-                continue        # die erste Zeile gilt - die hoechste PROB_ID
-            self.aufschluss.setdefault(probe, {})[name] = eintrag["mw"]
-            serie = str(eintrag.get("serie") or "").strip()
-            self.aufschlussherkunft[(probe, name)] = NACHGETRAGEN.format(
-                prob_id=eintrag.get("prob_id"),
-                woher=f", Serie {serie}" if serie else "")
+            for probe in sorted(je_nummer.get(nummer, ())):
+                if str(self.aufschluss.get(probe, {}).get(name)
+                       or "").strip():
+                    continue
+                if (probe, name) in self.aufschlussherkunft:
+                    continue    # die erste Zeile gilt - die hoechste PROB_ID
+                self.aufschluss.setdefault(probe, {})[name] = eintrag["mw"]
+                serie = str(eintrag.get("serie") or "").strip()
+                self.aufschlussherkunft[(probe, name)] = NACHGETRAGEN.format(
+                    prob_id=eintrag.get("prob_id"),
+                    woher=f", Serie {serie}" if serie else "")
 
     def aufschlusshinweis(self, probe: str, spalte: str):
         """Woher ein nachgetragener Aufschlusswert kommt - sonst None."""
         return self.aufschlussherkunft.get((probe, spalte))
+
+    def ergebnishinweis(self, probe: str, spalte: str):
+        """Was ueber einer Zelle der berechneten Groessen steht - sonst None.
+
+        Steht eine Groesse rot, weil eine Handeingabe sie bewegt hat,
+        sagt der Hinweis, was vorher dastand und wohin es ging - ohne
+        dass jemand die Eingabe zuruecknehmen muss, um es zu sehen.
+        Sonst, wo es einen gibt, der Hinweis zum Aufschluss.
+        """
+        spalte = str(spalte)
+        for anhaengsel in trdflegende.ANHAENGSEL:
+            if not spalte.endswith(anhaengsel):
+                continue
+            kuerzel = spalte[:-len(anhaengsel)]
+            if kuerzel not in self.formeln or \
+                    kuerzel not in self.bewegt(probe):
+                return None
+            stellen = trdfpruefung.stellen_fuer(kuerzel, STELLEN)
+            alt = self.gerechnet_ohne_hand(probe).get(kuerzel)
+            neu = self.gerechnet(probe).get(kuerzel)
+            gebucht = self.gebucht.get(probe, {}).get(kuerzel)
+            return aenderungstext(
+                zahltext(alt, stellen) or trdf.MARKE,
+                zahltext(neu, stellen) or trdf.MARKE,
+                _differenz(alt, neu, stellen),
+                trdf.MARKE if trdf.leer(gebucht)
+                else zahltext(trdf.zahl(gebucht), stellen))
+        return self.aufschlusshinweis(probe, spalte)
+
+    def rohhinweis(self, probe: str, spalte: str):
+        """Ueber einem von Hand geaenderten Rohwert: der alte Wert - sonst None."""
+        spalte = str(spalte)
+        if (probe, spalte) not in self.vonhand:
+            return None
+        alt = self.rohwert_ohne_hand(probe, spalte)
+        neu = self.vonhand[(probe, spalte)]
+        return aenderungstext(rohtext(spalte, alt), rohtext(spalte, neu),
+                              _differenz(trdf.zahl(alt), trdf.zahl(neu)),
+                              rohtext(spalte, self.limsroh.get(probe, {})
+                                      .get(spalte)))
 
     # -------------------------------------------------------- Einfuegetext
     def _text_leeren(self):
@@ -1573,8 +1722,11 @@ class TrdfSeite(tk.Frame):
         unbekannt = [name for name in gelesen["spalten"]
                      if name not in self.rohnamen]
         self.eingefuegt = {}
-        for zeile in trdf.ohne_wiederholungen(gelesen["zeilen"]):
-            self.eingefuegt[zeile["probe"]] = {
+        for zeile in gelesen["zeilen"]:
+            # Wiederholungen (UM/ME) treffen ihre eigene Zeile - unter
+            # derselben Kennung wie im LIMS.
+            self.eingefuegt[trdf.probenkennung(
+                    zeile["probe"], zeile["wdh_um"], zeile["wdh_me"])] = {
                 self.rohnamen[name]: wert
                 for name, wert in zeile["werte"].items()
                 if name in self.rohnamen}
@@ -1682,7 +1834,7 @@ class TrdfSeite(tk.Frame):
         # offene Eingabefeld heraus, und der naechste Tabulator ginge
         # ins Leere. Gefaerbt wird nur die eine Zelle.
         for tabelle in self.rohtabellen:
-            tabelle.setzen(zeile, spalte, wert)
+            tabelle.setzen(zeile, spalte, rohtext(spalte, wert))
             tabelle.marke_setzen(zeile, spalte, "geaendert")
             tabelle.marke_setzen(zeile, "Probe", "geaendert")
         self._befund_nachtragen(zeile)
@@ -1724,7 +1876,7 @@ class TrdfSeite(tk.Frame):
         for kuerzel, wert in neu.items():
             self.vonhand[(probe, kuerzel)] = wert
             for tabelle in self.rohtabellen:
-                if tabelle.setzen(probe, kuerzel, wert):
+                if tabelle.setzen(probe, kuerzel, rohtext(kuerzel, wert)):
                     tabelle.marke_setzen(probe, kuerzel, "geaendert")
                     tabelle.marke_setzen(probe, "Probe", "geaendert")
         if neu:
@@ -1803,7 +1955,7 @@ class TrdfSeite(tk.Frame):
         for zeile, spalte, wert in gesetzt:
             self.vonhand[(zeile, spalte)] = wert
             for tabelle in self.rohtabellen:
-                tabelle.setzen(zeile, spalte, wert)
+                tabelle.setzen(zeile, spalte, rohtext(spalte, wert))
                 tabelle.marke_setzen(zeile, spalte, "geaendert")
                 tabelle.marke_setzen(zeile, "Probe", "geaendert")
         self._rechnung_vergessen()
@@ -2016,7 +2168,8 @@ class TrdfSeite(tk.Frame):
             if trdfrohpruefung.unvollstaendig(rohwerte):
                 vorneweg = [ROHWERTE_UNVOLLSTAENDIG] + vorneweg
             blatt.append({"lnr": lnr, "probe": probe, "werte": werte,
-                          "bewertung": vorneweg + bewertung})
+                          "bewertung": vorneweg + bewertung,
+                          **self._wiederholungsteil(probe)})
         return blatt
 
     # ------------------------------------------------------------- Anzeige
@@ -2025,6 +2178,25 @@ class TrdfSeite(tk.Frame):
             self._rohwerte_zeigen()
         self._ergebnisse_zeigen()
         self._pruefung_zeigen()
+
+    def probenangabe(self, probe: str) -> tuple:
+        """Probennummer, UM und ME zu einer Zeile - (Nummer, 1, 1) ohne Angabe."""
+        return self.wiederholungen.get(probe, (probe, 1, 1))
+
+    def probenfelder(self, probe: str, spalte="Probe") -> dict:
+        """Die Spalten, die eine Zeile benennen: Probe, UM und ME.
+
+        Die Probenspalte zeigt die blosse Nummer; welche Messung es ist,
+        sagen UM und ME daneben - bei einer Wiederholung steht dieselbe
+        Nummer in mehreren Zeilen.
+        """
+        nummer, um, me = self.probenangabe(probe)
+        return {spalte: nummer, "UM": um, "ME": me}
+
+    def _wiederholungsteil(self, probe: str) -> dict:
+        """Nummer, UM und ME fuer die Blaetter (CSV)."""
+        nummer, um, me = self.probenangabe(probe)
+        return {"nummer": nummer, "um": um, "me": me}
 
     def rohsatz(self, probe: str) -> dict:
         """Die Rohwerte einer Probe, so wie gerade gerechnet wird."""
@@ -2086,7 +2258,8 @@ class TrdfSeite(tk.Frame):
         return [{"lnr": lnr, "probe": probe, "werte": self.rohsatz(probe),
                  "wgh": zahltext(trdf.zahl(self.wgh.get(probe)),
                                  STELLEN_WGH),
-                 "bewertung": self.rohbefund(probe)}
+                 "bewertung": self.rohbefund(probe),
+                 **self._wiederholungsteil(probe)}
                 for lnr, probe in self.proben]
 
     def _kopfhinweise(self, tabelle, spalten, quellen=None):
@@ -2109,7 +2282,7 @@ class TrdfSeite(tk.Frame):
         """
         return self._geordnet(
             BLATT_ROH,
-            ["Zeile", "Probe"] + list(self.rohliste)
+            ["Zeile", "Probe", "UM", "ME"] + list(self.rohliste)
             + ["WGH", BEWERTUNGSSPALTE],
             roh=True)
 
@@ -2119,12 +2292,12 @@ class TrdfSeite(tk.Frame):
         auffaellig = 0
         for eintrag in self.rohblatt():
             probe = eintrag["probe"]
-            werte = {"Zeile": eintrag["lnr"], "Probe": probe,
+            werte = {"Zeile": eintrag["lnr"], **self.probenfelder(probe),
                      "WGH": eintrag["wgh"],
                      BEWERTUNGSSPALTE:
                          trdfrohpruefung.bewertungstext(eintrag["bewertung"])}
             for kuerzel in self.rohliste:
-                werte[kuerzel] = self.rohwert(probe, kuerzel) or trdf.MARKE
+                werte[kuerzel] = rohtext(kuerzel, self.rohwert(probe, kuerzel))
                 aus_der_quelle = self.aus_der_quelle(probe, kuerzel)
                 im_lims = self.limsroh.get(probe, {}).get(kuerzel)
                 if (probe, kuerzel) in self.vonhand:
@@ -2146,9 +2319,11 @@ class TrdfSeite(tk.Frame):
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if werte.get(BEWERTUNGSSPALTE)]
         for tabelle in self.rohtabellen:
+            tabelle.zellhinweise(self.rohhinweis)
             tabelle.fuellen(
                 spalten, zeilen, aenderbar=self.rohliste, marken=marken,
-                breiten={"Zeile": 56, "Probe": 110, "WGH": 110,
+                breiten={"Zeile": 56, "Probe": 110, "UM": 40, "ME": 40,
+                         "WGH": 110,
                          BEWERTUNGSSPALTE: 420},
                 fest=fest, ueberschriften=koepfe,
                 zugspalten=("Probe",))
@@ -2171,7 +2346,7 @@ class TrdfSeite(tk.Frame):
         steht in `gruppen`.
         """
         gerechnet = list(self.folge)
-        spalten = ["Zeile", "Probe"]
+        spalten = ["Zeile", "Probe", "UM", "ME"]
         for kuerzel in gerechnet:
             spalten += [f"{kuerzel} LIMS", f"{kuerzel} ber."]
         spalten += ["WGH", "Cges", "CO3", BEWERTUNGSSPALTE]
@@ -2199,7 +2374,7 @@ class TrdfSeite(tk.Frame):
             ergebnis = self.gerechnet(probe)
             werte = {}
             werte.update({
-                     "Zeile": lnr, "Probe": probe,
+                     "Zeile": lnr, **self.probenfelder(probe),
                      "WGH": zahltext(trdf.zahl(self.wgh.get(probe)),
                                      STELLEN_WGH),
                      "Cges": zahltext(trdf.zahl(
@@ -2255,10 +2430,11 @@ class TrdfSeite(tk.Frame):
                 marken[(probe, BEWERTUNGSSPALTE)] = "abweichung"
             zeilen.append((probe, werte))
         for tabelle in self.ergebnistabellen:
-            tabelle.zellhinweise(self.aufschlusshinweis)
+            tabelle.zellhinweise(self.ergebnishinweis)
             tabelle.fuellen(
                 spalten, zeilen, marken=marken,
-                breiten={"Zeile": 56, "Probe": 110, BEWERTUNGSSPALTE: 420},
+                breiten={"Zeile": 56, "Probe": 110, "UM": 40, "ME": 40,
+                         BEWERTUNGSSPALTE: 420},
                 fest=fest, ueberschriften=koepfe)
             self._kopfhinweise(tabelle, spalten)
         if self.proben:
@@ -2283,7 +2459,8 @@ class TrdfSeite(tk.Frame):
         auffaellig = 0
         blatt = self.geprueft()
         for probe in blatt:
-            werte = {"Zeile": probe["lnr"], "Probe-Nr.": probe["probe"],
+            werte = {"Zeile": probe["lnr"],
+                     **self.probenfelder(probe["probe"], "Probe-Nr."),
                      "Bewertung": trdfpruefung.bewertungstext(
                          probe["bewertung"])}
             bewegte = self.bewegt(probe["probe"])
@@ -2370,7 +2547,7 @@ class TrdfSeite(tk.Frame):
     def _legende_stellen(self):
         """Welche Spalte welchen Parameter des LIMS zeigt."""
         teile = []
-        for name in trdfpruefung.SPALTEN[2:-2]:
+        for name in trdfpruefung.SPALTEN[4:-2]:
             kuerzel = trdfpruefung.QUELLEN[name]
             im_lims = self.parameternamen.get(kuerzel)
             teile.append(f"{name} = {im_lims or kuerzel}")
