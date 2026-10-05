@@ -77,6 +77,9 @@ class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
         self.text = text
+        # Die Schrift des Hinweises - eine Liste von Tasten steht in
+        # gleichbreiter Schrift sauber untereinander.
+        self.font = ("Arial", 9)
         self.tipwindow = None
         self.id = None
         self.widget.bind("<Enter>", self.enter)
@@ -98,7 +101,7 @@ class ToolTip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         lbl = tk.Label(tw, text=self.text, justify=tk.LEFT, background="#ffffe0",
-                       relief=tk.SOLID, borderwidth=1, font=("Arial", 9))
+                       relief=tk.SOLID, borderwidth=1, font=self.font)
         lbl.pack(ipadx=3, ipady=3)
         # Am rechten oder unteren Bildschirmrand nach innen ruecken - ein
         # Hinweis, der halb aus dem Bild ragt, ist halb gelesen.

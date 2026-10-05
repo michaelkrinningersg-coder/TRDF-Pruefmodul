@@ -9,6 +9,9 @@ Korrekturen an den Rohwerten in das LIMS zurück.
 Wie LabControl ist es eine portable Anwendung **ohne Installation, ohne
 Server und ohne Internet**.
 
+**Zur Bedienung: [ANLEITUNG.md](ANLEITUNG.md)** (Kurzanleitung mit allen
+Tastenkürzeln).
+
 ## Was drin ist – und was nicht
 
 | drin | nicht drin |
@@ -19,8 +22,9 @@ Server und ohne Internet**.
 | Rohwerte von Hand ändern (auch Einfügen aus Excel, Großansicht) | Plotvergleich |
 | **Blockbild** beim Klick auf die Probe | |
 | **LIMS-Export**: *In das LIMS schreiben*, *Sicherung zurueckspielen*, *Anhang angleichen* | |
-| Einfügefeld für die Liste der Probenvorbereitung – als Option, erst nach Klick sichtbar; Quelle umschalten | |
-| Info/Legende je Tabelle, CSV-Blätter, Streubild TRDF über Kohlenstoff | |
+| Liste der Probenvorbereitung einfügen – als Option in eigenem Fenster; im LIMS fehlende Werte werden zum Schreiben vorgemerkt | |
+| Excel-Kürzel im Raster: Strg+C/V, Strg+D, Strg+Shift+D, Strg+L, Strg+I, Strg+E, Strg+Shift+E | |
+| Info/Legende je Tabelle (gespeichert, beim nächsten Start wieder da), CSV-Blätter inkl. Ergebnisblatt, Streubild TRDF über Kohlenstoff | |
 
 ## Ablauf
 

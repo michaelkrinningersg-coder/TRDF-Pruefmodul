@@ -1825,21 +1825,42 @@ def test_ohne_gewaehlte_methode_wird_nicht_abgerufen() -> None:
 
 # ------------------------------------------- Aufgeraeumte Oberflaeche
 
-def test_die_liste_der_probenvorbereitung_ist_eine_option() -> None:
+def test_die_liste_der_probenvorbereitung_hat_ein_eigenes_fenster() -> None:
     def pruefen(fenster):
         blatt = seite(fenster)
-        assert not blatt.einfuegen_offen()
-        assert blatt.knopf_einfuegen._text == trdfreiter.EINFUEGEN_EIN_TEXT
-        blatt._einfuegen_umschalten()
-        assert blatt.einfuegen_offen()
-        assert blatt.knopf_einfuegen._text == trdfreiter.EINFUEGEN_AUS_TEXT
-        # Zugeklappt bleibt die Liste liegen.
-        blatt.textfeld.insert("1.0", "etwas")
-        blatt._einfuegen_umschalten()
-        assert not blatt.einfuegen_offen()
-        assert blatt.textfeld.get("1.0", "end").strip() == "etwas"
-        # Die Statuszeile steht trotzdem da.
+        assert not hasattr(blatt, "textfeld")       # nicht auf der Seite
+        assert blatt.knopf_einfuegen._text == trdfreiter.EINFUEGEN_TEXT
+        eigenes = blatt.einfuegen_oeffnen()
+        assert isinstance(eigenes, tk.Toplevel)
+        assert blatt.einfuegen_oeffnen() is eigenes  # nur eines
+        assert "Strg+V" in eigenes.hinweis.cget("text")
+        # Zu und wieder auf: die Liste bleibt liegen.
+        eigenes.textfeld.insert("1.0", "etwas")
+        eigenes._schliessen()
+        wieder = blatt.einfuegen_oeffnen()
+        assert wieder.textfeld.get("1.0", "end").strip() == "etwas"
+        wieder._schliessen()
         assert blatt.stand.winfo_manager() == "pack"
+    mit_fenster(pruefen)
+
+
+def test_was_im_lims_fehlt_wird_aus_der_liste_vorgemerkt() -> None:
+    """Rohwerte, die im LIMS noch nicht stehen, kommen aus der Liste -
+    und gehen ueber \u201eIn das LIMS schreiben\u201c dorthin. Ein
+    gebuchter Wert wird nicht still ersetzt."""
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        blatt.limsroh["26B0005"]["GMSZ"] = ""            # fehlt im LIMS
+        gebucht = blatt.limsroh["26B0005"]["VOLSZ"]
+        blatt.eingefuegt = {"26B0005": {"GMSZ": "834,3", "VOLSZ": "999"},
+                            "26B9999": {"GMSZ": "1"}}  # nicht in der Serie
+        assert blatt._fehlende_vormerken() == 1
+        assert blatt.vonhand == {("26B0005", "GMSZ"): "834,3"}
+        assert blatt.limsroh["26B0005"]["VOLSZ"] == gebucht
+        geschrieben = {(eine["probe"], eine["kuerzel"])
+                       for eine in blatt.aenderungen()}
+        assert ("26B0005", "GMSZ") in geschrieben
+        assert ("26B0005", "VOLSZ") not in geschrieben
     mit_fenster(pruefen)
 
 
@@ -1980,6 +2001,223 @@ def test_die_tabellen_haben_die_groessere_schrift() -> None:
                         blatt.berichtstabelle):
             assert tabelle.schrift[1] == trdfreiter.SCHRIFT
             assert tabelle.zeilenluft == trdfreiter.ZEILENLUFT
+    mit_fenster(pruefen)
+
+
+# ------------------------------------------------ Wie in Excel: Strg+D/E
+
+def offen_tun(tabelle, zeile, spalte):
+    """Eine Zelle so offen stellen, als haette man sie angeklickt.
+
+    Ohne sichtbares Fenster findet das Feld seine Zelle nicht (siehe
+    `eingetippt`); geprueft wird hier, was die Tasten tun.
+    """
+    tabelle._offen = (str(zeile), str(spalte))
+    tabelle._vorher = tabelle.wert(zeile, spalte)
+    tabelle._aktiv = tabelle.feld
+    tabelle.feld.delete(0, "end")
+    tabelle.feld.insert(0, tabelle._vorher)
+
+
+def test_strg_d_uebernimmt_den_wert_darueber() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        tabelle = blatt.rohtabelle
+        oben = tabelle.wert("26B0005", "GMSZ").strip()
+        offen_tun(tabelle, "26B0011", "GMSZ")
+        assert tabelle.von_oben() == "break"
+        assert tabelle.wert("26B0011", "GMSZ").strip() == oben
+        # Die Seite hat es mitbekommen - als Handaenderung, rot.
+        assert blatt.rohwert("26B0011", "GMSZ") == oben
+        assert tabelle.marke("26B0011", "GMSZ") == "geaendert"
+        assert tabelle.feld.get() == oben          # die Zelle bleibt offen
+    mit_fenster(pruefen)
+
+
+def test_strg_d_in_der_ersten_zeile_tut_nichts() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        offen_tun(blatt.rohtabelle, "26B0005", "GMSZ")
+        blatt.rohtabelle.von_oben()
+        assert blatt.vonhand == {}
+    mit_fenster(pruefen)
+
+
+def leer_machen(blatt, probe, anzahl=2) -> list:
+    """Ein paar Rohwerte der Probe, die im LIMS gar nicht stehen."""
+    gemacht = []
+    for kuerzel in blatt.rohliste:
+        if kuerzel == "_TRDV" or len(gemacht) == anzahl:
+            continue
+        blatt.limsroh.setdefault(probe, {})[kuerzel] = ""
+        gemacht.append(kuerzel)
+    blatt._rechnung_vergessen()
+    blatt._zeigen()
+    return gemacht
+
+
+def test_strg_e_fuellt_nur_die_leeren_zellen_der_probe() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        leer = leer_machen(blatt, "26B0011")
+        leer_machen(blatt, "26B0005")
+        voll = [k for k in blatt.rohliste if k not in leer]
+        offen_tun(blatt.rohtabelle, "26B0011", voll[0])
+        blatt.rohtabelle._fuellen()
+        for kuerzel in leer:
+            assert blatt.rohwert("26B0011", kuerzel) == trdf.MARKE, kuerzel
+            assert blatt.rohtabelle.marke("26B0011", kuerzel) == "geaendert"
+        for kuerzel in voll:
+            assert ("26B0011", kuerzel) not in blatt.vonhand
+        # Die andere Probe bleibt, wie sie war.
+        assert not any(probe == "26B0005" for probe, _k in blatt.vonhand)
+        assert blatt.leere_fuellen("26B0011") == []
+    mit_fenster(pruefen)
+
+
+def test_strg_shift_e_fuellt_die_leeren_zellen_der_spalte() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        kuerzel = leer_machen(blatt, "26B0005", 1)[0]
+        leer_machen(blatt, "26B0011", 1)
+        offen_tun(blatt.rohtabelle, "26B0005", kuerzel)
+        blatt.rohtabelle._fuellen(spaltenweise=True)
+        assert blatt.vonhand == {("26B0005", kuerzel): trdf.MARKE,
+                                 ("26B0011", kuerzel): trdf.MARKE}
+    mit_fenster(pruefen)
+
+
+def test_strg_shift_d_kopiert_bis_ans_ende() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)                     # 1, 5, 11, 33
+        tabelle = blatt.rohtabelle
+        offen_tun(tabelle, "26B0005", "_TSM")
+        tabelle.feld.delete(0, "end")
+        tabelle.feld.insert(0, "40")
+        gesetzt = tabelle.nach_unten("alle")
+        assert [z for z, _s, _w in gesetzt] == ["26B0011", "26B0033"]
+        for probe in ("26B0005", "26B0011", "26B0033"):
+            assert blatt.rohwert(probe, "_TSM") == "40"
+        assert ("26B0001", "_TSM") not in blatt.vonhand   # darueber nicht
+    mit_fenster(pruefen)
+
+
+def test_strg_l_kopiert_nur_in_leere_zellen() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        blatt.limsroh["26B0033"]["_TSM"] = ""
+        vorher = blatt.rohwert("26B0011", "_TSM")
+        offen_tun(blatt.rohtabelle, "26B0005", "_TSM")
+        gesetzt = blatt.rohtabelle.nach_unten("leere")
+        assert gesetzt == [("26B0033", "_TSM", blatt.rohwert("26B0005",
+                                                             "_TSM"))]
+        assert blatt.rohwert("26B0011", "_TSM") == vorher
+    mit_fenster(pruefen)
+
+
+def test_strg_i_zaehlt_nach_unten_hoch() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        tabelle = blatt.rohtabelle
+        offen_tun(tabelle, "26B0001", "GMSZ")
+        tabelle.feld.delete(0, "end")
+        tabelle.feld.insert(0, "10,5")
+        tabelle.nach_unten("plus")
+        assert [blatt.rohwert(p, "GMSZ") for p in
+                ("26B0001", "26B0005", "26B0011", "26B0033")] == \
+            ["10,5", "11,5", "12,5", "13,5"]
+    mit_fenster(pruefen)
+
+
+def test_hochzaehlen_braucht_eine_zahl() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        offen_tun(blatt.rohtabelle, "26B0001", "GMSZ")
+        blatt.rohtabelle.feld.delete(0, "end")
+        blatt.rohtabelle.feld.insert(0, "x")
+        blatt.rohtabelle._uebernehmen()
+        vorher = dict(blatt.vonhand)
+        assert blatt.rohtabelle.nach_unten("plus") == []
+        assert blatt.vonhand == vorher
+    mit_fenster(pruefen)
+
+
+def test_eine_variante_nach_unten_setzt_ihre_x() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        offen_tun(blatt.rohtabelle, "26B0005", "_TRDV")
+        blatt.rohtabelle.feld.delete(0, "end")
+        blatt.rohtabelle.feld.insert(0, "0")
+        blatt.rohtabelle.nach_unten("alle")
+        # 0 raeumt die Zeile - auch in den Zeilen darunter.
+        for probe in ("26B0011", "26B0033"):
+            andere = [k for k in blatt.rohliste if k != "_TRDV"]
+            assert all(blatt.vonhand.get((probe, k)) == "" for k in andere)
+    mit_fenster(pruefen)
+
+
+def test_die_tasten_stehen_im_dezenten_i() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        for taste in ("Strg+D", "Strg+Shift+D", "Strg+L", "Strg+I",
+                      "Strg+E", "Strg+Shift+E", "Strg+V"):
+            assert taste in blatt.info_tasten.text
+        # Nicht im Erklaertext - der sagt, was die Tabelle ist.
+        assert "Strg+D" not in blatt.info_roh.text
+        assert blatt.info_tasten.cget("bg") != blatt.info_roh.cget("bg")
+    mit_fenster(pruefen)
+
+
+def test_die_berechneten_groessen_gehen_als_csv() -> None:
+    def pruefen(fenster):
+        ordner = tempfile.mkdtemp(prefix="ergebnisblatt-")
+        blatt = seite(fenster, ordner=ordner)
+        kopf, zeilen = blatt.ergebnisblatt()
+        assert kopf[:2] == ["Zeile", "Probe"]
+        assert len(zeilen) == 4
+        pfad = blatt._ergebnisblatt_speichern()
+        assert pfad.startswith(ordner) and os.path.isfile(pfad)
+        with open(pfad, encoding="utf-8-sig") as datei:
+            inhalt = datei.read()
+        assert "Berechnete Groessen - Serie 2026B051" in inhalt
+        assert "26B0011" in inhalt
+        assert "TRD_TRDF ber." in inhalt
+    mit_fenster(pruefen)
+
+
+def test_spaltenkoepfe_und_beschreibungen_ueberstehen_den_neustart() -> None:
+    """Was unter \u201eInfo\u201c gespeichert wird, steht beim naechsten
+    Start wieder da - aus der Datei neben dem Programm."""
+    import config
+
+    def pruefen(fenster):
+        ordner = tempfile.mkdtemp(prefix="neustart-")
+        blatt = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                     lambda *a, **k: None, ordner=ordner)
+        fehler = blatt._spalten_speichern(
+            trdfreiter.BLATT_ROH, {"GMSZ": "Gesamtmasse feucht"},
+            {"reihenfolge": ["Zeile", "Probe", "_TRDV", "GMSZ"],
+             "fest": ["Zeile", "Probe"], "versteckt": ["FBLFL"],
+             "kopfspalte": "Name", "kopfspalten": {"GMSZ": "Einheit"}})
+        assert fehler == ""
+        blatt._berechnete_umschalten()
+        neu = config.Config(runtime_dir=ordner)          # der Neustart
+        assert neu.get("trdf_beschreibung") == {"GMSZ": "Gesamtmasse feucht"}
+        assert neu.get("trdf_reihenfolge")[trdfreiter.BLATT_ROH][:3] == \
+            ["Zeile", "Probe", "_TRDV"]
+        assert neu.get("trdf_fest")[trdfreiter.BLATT_ROH] == ["Zeile",
+                                                              "Probe"]
+        assert neu.get("trdf_versteckt")[trdfreiter.BLATT_ROH] == ["FBLFL"]
+        assert neu.get("trdf_kopfspalte") == "Name"
+        assert neu.get("trdf_kopfspalten") == {"GMSZ": "Einheit"}
+        assert neu.get("trdf_berechnete") == trdfreiter.BERECHNETE_AN
+        # Und die neue Seite nimmt es.
+        wieder = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                      lambda *a, **k: None, ordner=ordner,
+                                      konfig=neu)
+        assert wieder.berechnete_offen()
+        assert wieder.beschreibungen() == {"GMSZ": "Gesamtmasse feucht"}
+        assert wieder.kopfspalte() == "Name"
     mit_fenster(pruefen)
 
 

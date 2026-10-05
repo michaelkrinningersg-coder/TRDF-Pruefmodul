@@ -103,6 +103,9 @@ class Config:
         # Formelkuerzel -> Wahl. Wie die Beschreibung haengt sie an der
         # Groesse und gilt damit in allen drei Tabellen.
         "trdf_kopfspalten": {},
+        # Ob ueber den Rohwerten die berechneten Groessen aufgeklappt
+        # stehen ("an") oder nicht ("aus").
+        "trdf_berechnete": "aus",
     }
 
     def __init__(self, runtime_dir=None):

@@ -161,10 +161,9 @@ ZEILENLUFT = 3
 # den Rohwerten.
 BERECHNETE_AN = "an"
 BERECHNETE_AUS = "aus"
-BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen einblenden"
-EINFUEGEN_EIN_TEXT = "\u25b8 Liste Probenvorbereitung einfuegen"
-EINFUEGEN_AUS_TEXT = "\u25be Liste Probenvorbereitung zuklappen"
-BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen ausblenden"
+BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen"
+EINFUEGEN_TEXT = "Probenvorbereitung einfuegen ..."
+BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
 # Reiter. Die Haelfte davon kommt aus der groesseren Schrift, die
@@ -301,6 +300,18 @@ def erklaerung(*saetze) -> str:
     return "\n".join(textwrap.fill(" ".join(saetze), 72).splitlines())
 
 
+# Was im Rohwertraster wie in Excel geht - steht im i der Rohwerte.
+TASTEN = ("Tab / Pfeile / Eingabe   Zelle wechseln\n"
+          "Strg+C / Strg+V          kopieren / Block aus Excel einfuegen\n"
+          "Strg+D                   Wert der Zelle darueber uebernehmen\n"
+          "Strg+Shift+D             Wert nach unten kopieren (bis zum Ende)\n"
+          "Strg+L                   Wert nach unten, nur in leere Zellen\n"
+          "Strg+I                   nach unten hochzaehlen (+1 je Zeile)\n"
+          "Strg+E                   leere Zellen der Probe mit x fuellen\n"
+          "Strg+Shift+E             leere Zellen der Spalte mit x fuellen\n"
+          "Variante (_TRDV):  x = alles x,  0 = Zeile leeren,\n"
+          "                   1-7 = nicht benoetigte Felder bekommen x")
+
 PRUEF_ERKLAERUNG = erklaerung(
     "Die bodenphysikalischen Werte, nach Probe-Nr. "
     "sortiert. Geprueft wird, was das Pruefmodul gerechnet "
@@ -324,11 +335,17 @@ class Infozeichen(tk.Label):
     die Maus auf dem i steht - oder sofort bei einem Klick darauf.
     """
 
-    def __init__(self, eltern, text: str, bg=None):
-        super().__init__(eltern, text="i", fg="#ffffff", bg=Style.ACCENT,
+    def __init__(self, eltern, text: str, dezent=False):
+        # Dezent: grau statt blau - fuer das, was man einmal nachschlaegt
+        # und dann kann, wie die Tastenkuerzel.
+        super().__init__(eltern, text="i",
+                         fg="#64748b" if dezent else "#ffffff",
+                         bg="#e2e8f0" if dezent else Style.ACCENT,
                          font=(Style.FONT, 8, "bold italic"), width=2,
                          cursor="question_arrow", padx=0, pady=0)
         self._hinweis = ToolTip(self, text)
+        if dezent:
+            self._hinweis.font = ("Consolas", 9)
         self.bind("<Button-1>", lambda e: self._sofort())
 
     @property
@@ -348,7 +365,7 @@ class TrdfSeite(tk.Frame):
 
     def __init__(self, eltern, zugang_holen, im_hintergrund, ordner=None,
                  konfig=None):
-        super().__init__(eltern, bg=Style.BG, padx=14, pady=14)
+        super().__init__(eltern, bg=Style.BG, padx=8, pady=6)
         self._zugang_holen = zugang_holen
         self._im_hintergrund = im_hintergrund
         self._ordner = ordner or config.get_runtime_dir()
@@ -401,11 +418,13 @@ class TrdfSeite(tk.Frame):
 
     # ------------------------------------------------------------- Aufbau
     def _aufbauen(self):
+        # Der Kopf ist so knapp wie moeglich: drei Zeilen, damit den
+        # Tabellen darunter der Platz bleibt.
         kopf = tk.Frame(self, bg=Style.CARD, highlightbackground=Style.BORDER,
-                        highlightthickness=1, padx=16, pady=12)
+                        highlightthickness=1, padx=12, pady=6)
         kopf.pack(fill="x")
         titel = tk.Frame(kopf, bg=Style.CARD)
-        titel.pack(fill="x", pady=(0, 8))
+        titel.pack(fill="x", pady=(0, 4))
         tk.Label(titel, text="Die Rechnung des LIMS nachrechnen und pruefen",
                  bg=Style.CARD, fg=Style.TEXT, font=Style.font(11, "bold"),
                  anchor="w").pack(side="left")
@@ -421,15 +440,15 @@ class TrdfSeite(tk.Frame):
             "gerechnet; in das LIMS geht eine Aenderung erst ueber "
             "\u201eIn das LIMS schreiben\u201c."))
         self.info_kopf.pack(side="left", padx=(8, 0))
-
         wahl = tk.Frame(kopf, bg=Style.CARD)
         wahl.pack(fill="x")
         tk.Label(wahl, text="Serie", bg=Style.CARD, fg=Style.MUTED,
-                 font=Style.font(9)).grid(row=0, column=0, sticky="w")
+                 font=Style.font(9)).grid(row=0, column=0, sticky="w",
+                                          padx=(0, 6))
         self.v_serie = tk.StringVar(value=self._gemerkt("serie"))
         self.feld_serie = ttk.Combobox(wahl, textvariable=self.v_serie,
-                                       width=20)
-        self.feld_serie.grid(row=1, column=0, sticky="w", padx=(0, 12))
+                                       width=14)
+        self.feld_serie.grid(row=0, column=1, sticky="w", padx=(0, 8))
         self.feld_serie.bind("<Return>", lambda e: self._abfragen())
         self.feld_serie.bind("<<ComboboxSelected>>",
                              lambda e: self._serie_gewechselt())
@@ -441,19 +460,19 @@ class TrdfSeite(tk.Frame):
         self.knopf_abfragen = RoundedButton(
             wahl, text="Abfragen", width=120, height=30, bg="#15803d",
             command=self._abfragen)
-        self.knopf_abfragen.grid(row=1, column=1, sticky="w", padx=(0, 12))
+        self.knopf_abfragen.grid(row=0, column=2, sticky="w", padx=(0, 16))
         ToolTip(self.knopf_abfragen,
                 "Fragt, welche Untersuchungsmethoden diese Serie fuehrt,\n"
                 "und bietet alle an, deren Kuerzel TRDF traegt. Ist es\n"
                 "genau eine, wird die Serie gleich geholt.")
         tk.Label(wahl, text="Untersuchungsmethode", bg=Style.CARD,
                  fg=Style.MUTED, font=Style.font(9)).grid(
-            row=0, column=2, sticky="w")
+            row=0, column=3, sticky="w", padx=(0, 6))
         self.v_methode = tk.StringVar()
         self.feld_methode = ttk.Combobox(
-            wahl, textvariable=self.v_methode, width=22, state="disabled",
+            wahl, textvariable=self.v_methode, width=18, state="disabled",
             values=[])
-        self.feld_methode.grid(row=1, column=2, sticky="w", padx=(0, 16))
+        self.feld_methode.grid(row=0, column=4, sticky="w", padx=(0, 12))
         self.v_methode.set(METHODE_OFFEN)
         self.feld_methode.bind("<<ComboboxSelected>>",
                                lambda e: self._methode_gewaehlt())
@@ -466,16 +485,16 @@ class TrdfSeite(tk.Frame):
                 "UM_ID dabei.")
         self.auskunft = tk.Label(wahl, text="", bg=Style.CARD, fg=Style.MUTED,
                                  font=Style.font(9), anchor="w")
-        self.auskunft.grid(row=1, column=3, sticky="w")
-        wahl.grid_columnconfigure(3, weight=1)
+        self.auskunft.grid(row=0, column=5, sticky="w")
+        wahl.grid_columnconfigure(5, weight=1)
         self.knopf_export = RoundedButton(
-            wahl, text="In das LIMS schreiben", width=200, height=30,
+            titel, text="In das LIMS schreiben", width=200, height=28,
             bg="#15803d", command=self._lims_schreiben)
-        self.knopf_export.grid(row=1, column=5, sticky="e")
+        self.knopf_export.pack(side="right")
         self.knopf_zurueck = RoundedButton(
-            wahl, text="Sicherung zurueckspielen", width=210, height=30,
+            titel, text="Sicherung zurueckspielen", width=210, height=28,
             bg="#6b7268", command=self._zurueckspielen)
-        self.knopf_zurueck.grid(row=1, column=4, sticky="e", padx=(0, 10))
+        self.knopf_zurueck.pack(side="right", padx=(0, 10))
         ToolTip(self.knopf_zurueck,
                 "Liest eine Datei aus dem Ordner „trdf_backup“ und stellt\n"
                 "den Stand wieder her, der vor der Korrektur im LIMS\n"
@@ -486,63 +505,37 @@ class TrdfSeite(tk.Frame):
                 "Vorher zeigt eine Uebersicht Zeile fuer Zeile, was alt und\n"
                 "was neu waere; der alte Stand geht in eine Sicherung.")
 
-        # Die Statuszeile steht immer da - sie sagt, was gerade geschieht.
-        self.stand = tk.Label(kopf, text="", bg=Style.CARD, fg=Style.MUTED,
-                              font=Style.font(9), anchor="w", justify="left",
-                              wraplength=1100)
-        self.stand.pack(fill="x", pady=(8, 0))
-
-        # Die Liste aus der Probenvorbereitung ist eine Option: sie steht
-        # erst da, wenn man sie aufklappt. Wer mit den Rohwerten aus dem
-        # LIMS arbeitet, braucht das Feld nicht.
-        quellzeile = tk.Frame(kopf, bg=Style.CARD)
-        quellzeile.pack(fill="x", pady=(8, 0))
-        self.knopf_einfuegen = RoundedButton(
-            quellzeile, text=EINFUEGEN_EIN_TEXT, width=360, height=26,
-            bg="#334155", command=self._einfuegen_umschalten)
-        self.knopf_einfuegen.pack(side="left")
-        ToolTip(self.knopf_einfuegen,
-                "Optional: die Liste aus der Probenvorbereitung einfuegen,\n"
-                "um zu pruefen, ob die Uebernahme in das LIMS stimmt.\n"
-                "Ohne sie wird mit den Rohwerten aus dem LIMS gerechnet.")
+        # Die Liste aus der Probenvorbereitung ist eine Option und hat ihr
+        # eigenes Fenster - so bekommt sie den ganzen Platz und nimmt der
+        # Seite keinen weg.
         self.knopf_quelle = RoundedButton(
-            quellzeile, text="", width=230, height=26, bg="#334155",
+            wahl, text="", width=210, height=28, bg="#334155",
             command=self._quelle_wechseln)
-        self.knopf_quelle.pack(side="right", padx=(12, 0))
+        self.knopf_quelle.grid(row=0, column=7, sticky="e")
         ToolTip(self.knopf_quelle,
                 "Woher die Rohwerte kommen, mit denen gerechnet wird.\n"
                 "Ein Klick wechselt zwischen der eingefuegten Liste der\n"
                 "Probenvorbereitung und dem Teilprobenanhang des LIMS -\n"
                 "der Stelle, aus der das LIMS selbst rechnet.\n"
                 "Von Hand geaenderte Werte stechen in beiden Faellen.")
-        self.einfuege_rahmen = tk.Frame(kopf, bg=Style.CARD)
-        self.quellschrift = tk.Label(
-            self.einfuege_rahmen, text="", bg=Style.CARD, fg=Style.MUTED,
-            font=Style.font(9), anchor="w")
-        self.quellschrift.pack(fill="x", pady=(6, 2))
-        einfuegen = tk.Frame(self.einfuege_rahmen, bg=Style.CARD)
-        einfuegen.pack(fill="x")
-        self.textfeld = tk.Text(einfuegen, height=6, wrap="none",
-                                font=("Consolas", 10), bg=Style.CARD,
-                                fg=Style.TEXT,
-                                highlightbackground=Style.BORDER,
-                                highlightthickness=1)
-        self.textfeld.pack(side="left", fill="both", expand=True)
-        leiste = tk.Scrollbar(einfuegen, orient="vertical",
-                              command=self.textfeld.yview)
-        leiste.pack(side="left", fill="y")
-        self.textfeld.configure(yscrollcommand=leiste.set)
-        knoepfe = tk.Frame(self.einfuege_rahmen, bg=Style.CARD)
-        knoepfe.pack(fill="x", pady=(6, 0))
-        RoundedButton(knoepfe, text="Uebernehmen", width=140, height=30,
-                      bg="#334155", command=self._text_uebernehmen).pack(
-            side="left")
-        RoundedButton(knoepfe, text="Leeren", width=100, height=30,
-                      bg="#6b7268", command=self._text_leeren).pack(
-            side="left", padx=(8, 0))
+        self.knopf_einfuegen = RoundedButton(
+            wahl, text=EINFUEGEN_TEXT, width=270, height=28,
+            bg="#334155", command=self.einfuegen_oeffnen)
+        self.knopf_einfuegen.grid(row=0, column=6, sticky="e", padx=(0, 8))
+        ToolTip(self.knopf_einfuegen,
+                "Optional: die Liste aus der Probenvorbereitung einfuegen\n"
+                "(dort \u201eaktueller Block\u201c -> kopieren). Oeffnet ein\n"
+                "eigenes Fenster. Werte, die im LIMS noch fehlen, werden\n"
+                "beim Uebernehmen zum Schreiben vorgemerkt.")
+
+        # Die Statuszeile steht immer da - sie sagt, was gerade geschieht.
+        self.stand = tk.Label(kopf, text="", bg=Style.CARD, fg=Style.MUTED,
+                              font=Style.font(9), anchor="w", justify="left",
+                              wraplength=1300)
+        self.stand.pack(fill="x", pady=(4, 0))
 
         self.reiter = ttk.Notebook(self)
-        self.reiter.pack(fill="both", expand=True, pady=(12, 0))
+        self.reiter.pack(fill="both", expand=True, pady=(6, 0))
         self._rohwerte_reiter()
         self._ergebnis_reiter()
         self._pruef_reiter()
@@ -553,14 +546,14 @@ class TrdfSeite(tk.Frame):
         self.serienliste_laden()
 
     def _rohwerte_reiter(self):
-        seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
+        seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Rohwerte ")
         leiste = tk.Frame(seite, bg=Style.BG)
-        leiste.pack(fill="x", pady=(0, 6))
-        RoundedButton(leiste, text="Rohwertblatt als CSV", width=190,
+        leiste.pack(fill="x", pady=(0, 4))
+        RoundedButton(leiste, text="Rohwertblatt CSV", width=150,
                       height=28, bg="#334155",
                       command=self._rohblatt_speichern).pack(side="left")
-        RoundedButton(leiste, text="Aenderungen als CSV", width=190,
+        RoundedButton(leiste, text="Aenderungen CSV", width=150,
                       height=28, bg="#334155",
                       command=self._aenderungen_speichern).pack(
             side="left", padx=(8, 0))
@@ -579,7 +572,7 @@ class TrdfSeite(tk.Frame):
                 "bleibt vollstaendig. Auch das grosse Fenster zeigt\n"
                 "dann nur diese Proben.")
         self._infoknopf(leiste, self._rohlegende_zeigen)
-        gross = RoundedButton(leiste, text="Maximieren", width=150,
+        gross = RoundedButton(leiste, text="Maximieren", width=120,
                               height=28, bg="#1d4ed8",
                               command=self._gross_zeigen)
         gross.pack(side="left", padx=(8, 0))
@@ -589,7 +582,7 @@ class TrdfSeite(tk.Frame):
                 "dort wie hier - Tabulator, Pfeile, Einfuegen aus\n"
                 "Excel, Klick auf die Probennummer. Was dort steht,\n"
                 "steht sofort auch hier.")
-        knopf = RoundedButton(leiste, text="Anhang angleichen", width=190,
+        knopf = RoundedButton(leiste, text="Anhang angleichen", width=170,
                               height=28, bg="#7c5e10",
                               command=self._anhang_angleichen)
         knopf.pack(side="left", padx=(8, 0))
@@ -613,6 +606,9 @@ class TrdfSeite(tk.Frame):
             "fehlt, was ausserhalb seines Bereichs liegt und was "
             "nicht zueinander passt."))
         self.info_roh.pack(side="left", padx=(10, 0))
+        self.info_tasten = Infozeichen(leiste, "Tastenkuerzel\n\n" + TASTEN,
+                                       dezent=True)
+        self.info_tasten.pack(side="left", padx=(4, 0))
         self.rohstand = tk.Label(leiste, text="", bg=Style.BG, fg=Style.MUTED,
                                  font=Style.font(9), anchor="w")
         self.rohstand.pack(side="left", padx=(14, 0))
@@ -621,12 +617,11 @@ class TrdfSeite(tk.Frame):
         # getrennte Tabellen, die Grenze dazwischen laesst sich ziehen.
         # Oben ist von Haus aus zugeklappt: dann gehoert das Fenster
         # den Rohwerten.
-        umschalter = tk.Frame(seite, bg=Style.BG)
-        umschalter.pack(fill="x", pady=(0, 4))
         self.knopf_berechnete = RoundedButton(
-            umschalter, text=BERECHNETE_EIN_TEXT, width=280, height=26,
+            leiste, text=BERECHNETE_EIN_TEXT, width=200, height=28,
             bg="#334155", command=self._berechnete_umschalten)
-        self.knopf_berechnete.pack(side="left")
+        self.knopf_berechnete.pack(side="left", padx=(8, 0),
+                                   before=self.info_roh)
         ToolTip(self.knopf_berechnete,
                 "Zeigt ueber den Rohwerten die berechneten Groessen -\n"
                 "dieselbe Tabelle wie im Reiter \u201eErgebnisse\u201c. Wer\n"
@@ -646,6 +641,10 @@ class TrdfSeite(tk.Frame):
             "(ber.). Rot: durch die Handeingabe bewegt - und die Probe, in "
             "der von Hand geaendert wurde. Unterlegt ist die Zeile, in der "
             "unten gerade getippt wird.")).pack(side="left", padx=(8, 0))
+        RoundedButton(obenkopf, text="Blatt als CSV", width=140, height=24,
+                      bg="#334155",
+                      command=self._ergebnisblatt_speichern).pack(
+            side="left", padx=(12, 0))
         self.berechnet_oben = eingaberaster.Eingaberaster(
             self.berechnet_rahmen, hoehe=8, bei_klick=self._block_zeigen,
             schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
@@ -656,6 +655,9 @@ class TrdfSeite(tk.Frame):
             bei_klick=self._block_zeigen,
             bei_block=self._block_eingefuegt,
             bei_zeile=self._arbeitszeile_setzen,
+            bei_fuellen=self.leere_fuellen,
+            ist_leer=self.ist_leer,
+            bei_nach_unten=self._nach_unten_eingefuegt,
             schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
         self.rohtabelle.pack(fill="both", expand=True)
         self.rohteilung.add(rohrahmen, weight=3)
@@ -666,10 +668,13 @@ class TrdfSeite(tk.Frame):
         self.rohtabellen = [self.rohtabelle]
 
     def _ergebnis_reiter(self):
-        seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
+        seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Ergebnisse ")
         leiste = tk.Frame(seite, bg=Style.BG)
-        leiste.pack(fill="x", pady=(0, 6))
+        leiste.pack(fill="x", pady=(0, 4))
+        RoundedButton(leiste, text="Ergebnisblatt als CSV", width=200,
+                      height=28, bg="#334155",
+                      command=self._ergebnisblatt_speichern).pack(side="left")
         self._infoknopf(leiste, self._ergebnislegende_zeigen)
         self.info_ergebnis = Infozeichen(leiste, erklaerung(
             "Je Groesse zwei Spalten: was das LIMS gebucht hat "
@@ -690,7 +695,7 @@ class TrdfSeite(tk.Frame):
 
     def _pruef_reiter(self):
         """Das Arbeitsblatt: ein Wert je Zeile und ein Urteil dazu."""
-        seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
+        seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Pruefung ")
         # Welche Spalte welchen Parameter zeigt: steht im i, nicht ueber
         # der Tabelle. Das Label bleibt als Traeger des Textes.
@@ -699,7 +704,7 @@ class TrdfSeite(tk.Frame):
                                 justify="left", wraplength=980)
 
         leiste = tk.Frame(seite, bg=Style.BG)
-        leiste.pack(fill="x", pady=(0, 6))
+        leiste.pack(fill="x", pady=(0, 4))
         RoundedButton(leiste, text="Blatt als CSV", width=150, height=28,
                       bg="#334155", command=self._blatt_speichern).pack(
             side="left")
@@ -735,10 +740,10 @@ class TrdfSeite(tk.Frame):
 
     def _bericht_reiter(self):
         """Was zuletzt in das LIMS gegangen ist - eine Probe je Zeile."""
-        seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
+        seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Exportbericht ")
         leiste = tk.Frame(seite, bg=Style.BG)
-        leiste.pack(fill="x", pady=(0, 6))
+        leiste.pack(fill="x", pady=(0, 4))
         RoundedButton(leiste, text="Bericht als CSV", width=170, height=28,
                       bg="#334155", command=self._bericht_speichern).pack(
             side="left")
@@ -764,20 +769,22 @@ class TrdfSeite(tk.Frame):
         self.berichtstabelle.pack(fill="both", expand=True)
 
     # ------------------------------------------------------ Einfuegeliste
-    def einfuegen_offen(self) -> bool:
-        """Ob das Feld fuer die Liste der Probenvorbereitung offen steht."""
-        return bool(self.einfuege_rahmen.winfo_manager())
+    def einfuegen_oeffnen(self):
+        """Das Fenster fuer die Liste der Probenvorbereitung - eines."""
+        vorhandenes = getattr(self, "einfuegefenster", None)
+        if vorhandenes is not None and vorhandenes.winfo_exists():
+            vorhandenes.lift()
+            vorhandenes.textfeld.focus_set()
+            return vorhandenes
+        self.einfuegefenster = Einfuegefenster(self)
+        return self.einfuegefenster
 
-    def _einfuegen_umschalten(self):
-        """Das Einfuegefeld auf- oder zuklappen - die Liste bleibt liegen."""
-        if self.einfuegen_offen():
-            self.einfuege_rahmen.pack_forget()
-            self.knopf_einfuegen.config(text=EINFUEGEN_EIN_TEXT)
-        else:
-            self.einfuege_rahmen.pack(fill="x", after=self.knopf_einfuegen
-                                      .master)
-            self.knopf_einfuegen.config(text=EINFUEGEN_AUS_TEXT)
-            self.textfeld.focus_set()
+    def einfuegetext(self) -> str:
+        """Was in der Liste steht - aus dem Fenster, wenn es offen ist."""
+        fenster = getattr(self, "einfuegefenster", None)
+        if fenster is not None and fenster.winfo_exists():
+            self._einfuegetext = fenster.textfeld.get("1.0", "end")
+        return getattr(self, "_einfuegetext", "")
 
     # ------------------------------------- Berechnete Groessen ueber Rohwerten
     def berechnete_offen(self) -> bool:
@@ -1512,21 +1519,25 @@ class TrdfSeite(tk.Frame):
 
     # -------------------------------------------------------- Einfuegetext
     def _text_leeren(self):
-        self.textfeld.delete("1.0", "end")
+        self._einfuegetext = ""
+        fenster = getattr(self, "einfuegefenster", None)
+        if fenster is not None and fenster.winfo_exists():
+            fenster.textfeld.delete("1.0", "end")
         self.eingefuegt = {}
         self._rechnung_vergessen()
         self._zeigen()
 
-    def _text_uebernehmen(self):
-        inhalt = self.textfeld.get("1.0", "end")
+    def _text_uebernehmen(self) -> bool:
+        """Die eingefuegte Liste lesen - zurueck kommt, ob es geklappt hat."""
+        inhalt = self.einfuegetext()
         if not inhalt.strip():
             self._melden("Das Einfuegefeld ist leer.", Style.WARN)
-            return
+            return False
         try:
             gelesen = trdf.text_lesen(inhalt)
         except trdf.Einfuegefehler as fehler:
             self._melden(str(fehler), Style.ERROR)
-            return
+            return False
         unbekannt = [name for name in gelesen["spalten"]
                      if name not in self.rohnamen]
         self.eingefuegt = {}
@@ -1535,8 +1546,12 @@ class TrdfSeite(tk.Frame):
                 self.rohnamen[name]: wert
                 for name, wert in zeile["werte"].items()
                 if name in self.rohnamen}
+        vorgemerkt = self._fehlende_vormerken()
         satz = (f"{len(self.eingefuegt)} Proben eingefuegt "
                 f"(Serie {gelesen['serie']}, {gelesen['methode']})")
+        if vorgemerkt:
+            satz += (f"  |  {vorgemerkt} Werte, die im LIMS noch fehlen, "
+                     f"zum Schreiben vorgemerkt")
         farbe = Style.TEXT
         if gelesen["serie"] and gelesen["serie"] != self.v_serie.get().strip():
             satz += f"  |  Achtung: abgerufen ist {self.v_serie.get()}"
@@ -1547,6 +1562,35 @@ class TrdfSeite(tk.Frame):
         self._melden(satz, farbe)
         self._rechnung_vergessen()
         self._zeigen()
+        for probe in list(self.bloecke):
+            self._block_auffrischen(probe)
+        return True
+
+    def _fehlende_vormerken(self) -> int:
+        """Was die Liste bringt und im LIMS noch fehlt, wird geschrieben.
+
+        Steht ein Rohwert im LIMS noch gar nicht, ist die Liste die
+        einzige Quelle - er wird vorgemerkt wie eine Handeingabe: rot,
+        aenderbar und ueber \u201eIn das LIMS schreiben\u201c schickbar.
+        Steht dort schon etwas, bleibt die Liste ein Vergleich (amber):
+        ein gebuchter Wert wird nicht still durch einen eingefuegten
+        ersetzt. Was schon von Hand dasteht, sticht.
+        """
+        eigene = {probe for _lnr, probe in self.proben}
+        vorgemerkt = 0
+        for probe, werte in self.eingefuegt.items():
+            if probe not in eigene:
+                continue
+            for kuerzel, wert in werte.items():
+                if kuerzel not in self.rohliste or \
+                        not str(wert or "").strip() or \
+                        (probe, kuerzel) in self.vonhand or \
+                        str(self.limsroh.get(probe, {}).get(kuerzel)
+                            or "").strip():
+                    continue
+                self.vonhand[(probe, kuerzel)] = str(wert).strip()
+                vorgemerkt += 1
+        return vorgemerkt
 
     # ----------------------------------------------------------- Die Quelle
     def _quelle_wechseln(self):
@@ -1561,17 +1605,21 @@ class TrdfSeite(tk.Frame):
         self._melden(self._quellstand(), Style.TEXT)
 
     def _quelle_zeigen(self):
-        """Beschriftet Knopf und Zeile nach der gewaehlten Quelle."""
-        andere = QUELLEN[(QUELLEN.index(self.quelle) + 1) % len(QUELLEN)]
+        """Beschriftet den Knopf - und den Hinweis im Einfuegefenster."""
         self.knopf_quelle.config(text=f"Quelle: {self.quelle}")
         if self.quelle == QUELLE_ANHANG:
-            self.quellschrift.config(
-                text="Gerechnet wird mit den Rohwerten aus dem "
-                     "Teilprobenanhang - die eingefuegte Liste bleibt "
-                     "liegen, bis wieder umgeschaltet wird.")
+            self.quellhinweis = (
+                "Achtung: gerechnet wird gerade mit den Rohwerten aus dem "
+                "Teilprobenanhang - die eingefuegte Liste wird gelesen, "
+                "zaehlt aber erst nach dem Umschalten der Quelle.")
         else:
-            self.quellschrift.config(
-                text="Liste aus der Probenvorbereitung hier einfuegen")
+            self.quellhinweis = (
+                "In der Probenvorbereitung \u201eaktueller Block\u201c -> "
+                "kopieren, hier mit Strg+V einfuegen, dann "
+                "\u201eUebernehmen\u201c.")
+        fenster = getattr(self, "einfuegefenster", None)
+        if fenster is not None and fenster.winfo_exists():
+            fenster.hinweis.config(text=self.quellhinweis)
 
     def _quellstand(self) -> str:
         """Wie viele Werte die Quelle je Probe liefert."""
@@ -1648,6 +1696,66 @@ class TrdfSeite(tk.Frame):
                 f"Variante {str(eingabe).strip()}: {len(neu)} Rohwerte "
                 f"angepasst", Style.TEXT)
         return neu
+
+    def ist_leer(self, probe: str, kuerzel: str) -> bool:
+        """Steht hier wirklich nichts - weder Zahl noch x?
+
+        Die Tabelle zeigt eine leere Zelle als x; fuer das Fuellen und
+        das Kopieren nach unten zaehlt aber der Unterschied: ein x heisst
+        "hier soll nichts stehen" (so setzt es die Variante), leer heisst
+        "hier steht noch nichts".
+        """
+        return not str(self.rohwert(probe, kuerzel) or "").strip()
+
+    def leere_fuellen(self, probe=None, spalte=None) -> list:
+        """Strg+E / Strg+Shift+E: leere Rohwertzellen bekommen ein x.
+
+        Mit `probe` die Zeile dieser Probe, mit `spalte` die ganze
+        Spalte. Leer heisst: es steht wirklich nichts da (`ist_leer`).
+        Ein x heisst im LIMS "hier soll nichts stehen", leer heisst
+        "hier steht noch nichts"; die Taste macht aus dem einen das
+        andere, so wie es die Eingabemaske des LIMS beim Setzen der
+        Variante tut. Zahlen bleiben unberuehrt.
+        """
+        if spalte is not None:
+            if spalte not in self.rohliste:
+                return []
+            zellen = [(name, spalte) for _lnr, name in self.proben]
+            wo = f"Spalte {spalte}"
+        else:
+            zellen = [(probe, kuerzel) for kuerzel in self.rohliste]
+            wo = str(probe)
+        gesetzt = [(name, kuerzel, trdf.MARKE) for name, kuerzel in zellen
+                   if self.ist_leer(name, kuerzel)]
+        if not gesetzt:
+            self._rohmelden(f"{wo}: keine leere Zelle", Style.TEXT)
+            return []
+        self._block_eingefuegt(gesetzt)
+        self._rohmelden(f"{wo}: {len(gesetzt)} leere Zellen mit "
+                        f"\u201e{trdf.MARKE}\u201c gefuellt", Style.TEXT)
+        return gesetzt
+
+    def _nach_unten_eingefuegt(self, gesetzt):
+        """Nach unten kopiert - wie ein Block, die Variante wirkt dabei.
+
+        Wer eine Variante nach unten zieht, will in jeder Zeile, was
+        die Variante dort verlangt: die x in den Feldern, die sie nicht
+        braucht. Ein Block aus Excel bringt seine Werte dagegen selbst
+        mit; deshalb gilt das nur hier.
+        """
+        self._block_eingefuegt(gesetzt)
+        varianten = [(zeile, wert) for zeile, spalte, wert in gesetzt
+                     if spalte == trdfrohpruefung.VARIANTE]
+        for zeile, wert in varianten:
+            self._variante_wirkt(zeile, wert)
+        if varianten:
+            self._rechnung_vergessen()
+            self._zeigen(nur_ergebnisse=True)
+            for zeile, _wert in varianten:
+                self._befund_nachtragen(zeile)
+                self._block_auffrischen(zeile)
+        self._rohmelden(f"{len(gesetzt)} Zellen nach unten gefuellt",
+                        Style.TEXT)
 
     def _block_eingefuegt(self, gesetzt, uebrig=0):
         """Ein Block aus der Zwischenablage - einmal rechnen, einmal zeigen.
@@ -2750,6 +2858,48 @@ class TrdfSeite(tk.Frame):
             am_anhang["mw"] = text
         self.vonhand.pop((probe, kuerzel), None)
 
+    def ergebnisblatt(self) -> tuple:
+        """Die berechneten Groessen, wie sie dastehen: (Kopf, Zeilen).
+
+        Gelesen wird aus der Tabelle selbst - mit ihrer Spaltenordnung
+        und den Ueberschriften, die unter \u201eInfo\u201c gewaehlt sind -,
+        damit im Blatt steht, was auf dem Schirm stand.
+        """
+        tabelle = self.ergebnistabelle
+        spalten = tabelle.spalten()
+        kopf = [" ".join(tabelle.ueberschriftzeilen(name)) or name
+                for name in spalten]
+        zeilen = [[tabelle.wert(kennung, name).strip() for name in spalten]
+                  for kennung in tabelle.zeilen()]
+        return kopf, zeilen
+
+    def _ergebnisblatt_speichern(self):
+        """Die berechneten Groessen als CSV ablegen und oeffnen."""
+        kopf, zeilen = self.ergebnisblatt()
+        if not zeilen:
+            self._melden("Es ist keine Serie abgerufen.", Style.WARN)
+            return ""
+        serie = self.v_serie.get().strip() or "Serie"
+        ordner = os.path.join(self._ordner, trdfpruefung.ORDNER)
+        name = "".join(zeichen for zeichen in serie
+                       if zeichen.isalnum() or zeichen in " _-.") or "Serie"
+        pfad = os.path.join(ordner, f"Ergebnisse {name}.csv")
+        inhalt = lims_db.csv_bloecke([(
+            f"Berechnete Groessen - Serie {serie} - {self.um_kuerzel}",
+            kopf, zeilen)])
+        try:
+            os.makedirs(ordner, exist_ok=True)
+            with open(pfad, "wb") as datei:
+                datei.write(inhalt)
+        except OSError:
+            self._melden(f"Die Datei liess sich nicht schreiben. Steht der "
+                         f"Ordner \u201e{ordner}\u201c zur Verfuegung?",
+                         Style.ERROR)
+            return ""
+        self._melden(f"{len(zeilen)} Zeilen  |  {pfad}", Style.TEXT)
+        trdfpruefung.oeffnen(pfad)
+        return pfad
+
     def _blatt_speichern(self):
         """Legt das Pruefblatt als CSV ab und oeffnet es."""
         blatt = self.geprueft()
@@ -2766,6 +2916,78 @@ class TrdfSeite(tk.Frame):
             return
         self._pruefmelden(f"{len(blatt)} Zeilen  |  {pfad}", Style.TEXT)
         trdfpruefung.oeffnen(pfad)
+
+
+class Einfuegefenster(tk.Toplevel):
+    """Die Liste aus der Probenvorbereitung - in einem eigenen Fenster.
+
+    Gross, damit die Liste ganz zu sehen ist, und ausserhalb der Seite,
+    damit sie den Tabellen keinen Platz nimmt. Was hier steht, bleibt
+    liegen, wenn das Fenster zugeht, und steht beim naechsten Oeffnen
+    wieder da.
+    """
+
+    def __init__(self, seite):
+        super().__init__(seite)
+        self.seite = seite
+        serie = seite.v_serie.get().strip()
+        self.title("Liste aus der Probenvorbereitung"
+                   + (f" - Serie {serie}" if serie else ""))
+        self.configure(bg=Style.BG)
+        self.geometry("1200x720")
+        self.minsize(600, 300)
+        try:
+            self.transient(seite.winfo_toplevel())
+        except tk.TclError:
+            pass
+        kopf = tk.Frame(self, bg=Style.BG)
+        kopf.pack(fill="x", padx=10, pady=(8, 4))
+        self.hinweis = tk.Label(kopf, text=getattr(seite, "quellhinweis", ""),
+                                bg=Style.BG, fg=Style.MUTED,
+                                font=Style.font(9), anchor="w")
+        self.hinweis.pack(side="left")
+        knoepfe = tk.Frame(self, bg=Style.BG)
+        knoepfe.pack(side="bottom", fill="x", padx=10, pady=8)
+        RoundedButton(knoepfe, text="Uebernehmen", width=150, height=32,
+                      bg="#15803d", command=self._uebernehmen).pack(
+            side="left")
+        RoundedButton(knoepfe, text="Leeren", width=110, height=32,
+                      bg="#6b7268", command=seite._text_leeren).pack(
+            side="left", padx=(8, 0))
+        RoundedButton(knoepfe, text="Schliessen", width=130, height=32,
+                      bg="#334155", command=self._schliessen).pack(
+            side="right")
+        rahmen = tk.Frame(self, bg=Style.BG)
+        rahmen.pack(fill="both", expand=True, padx=10)
+        self.textfeld = tk.Text(rahmen, wrap="none", font=("Consolas", 11),
+                                bg=Style.CARD, fg=Style.TEXT, undo=True,
+                                highlightbackground=Style.BORDER,
+                                highlightthickness=1)
+        senkrecht = tk.Scrollbar(rahmen, orient="vertical",
+                                 command=self.textfeld.yview)
+        waagerecht = tk.Scrollbar(rahmen, orient="horizontal",
+                                  command=self.textfeld.xview)
+        self.textfeld.configure(yscrollcommand=senkrecht.set,
+                                xscrollcommand=waagerecht.set)
+        self.textfeld.grid(row=0, column=0, sticky="nsew")
+        senkrecht.grid(row=0, column=1, sticky="ns")
+        waagerecht.grid(row=1, column=0, sticky="we")
+        rahmen.grid_rowconfigure(0, weight=1)
+        rahmen.grid_columnconfigure(0, weight=1)
+        self.textfeld.insert("1.0", getattr(seite, "_einfuegetext", "")
+                             .rstrip("\n"))
+        self.textfeld.focus_set()
+        self.protocol("WM_DELETE_WINDOW", self._schliessen)
+        self.bind("<Escape>", lambda e: self._schliessen())
+
+    def _uebernehmen(self):
+        """Lesen und rechnen - und bei Erfolg zugehen."""
+        if self.seite._text_uebernehmen():
+            self._schliessen()
+
+    def _schliessen(self):
+        self.seite._einfuegetext = self.textfeld.get("1.0", "end")
+        self.destroy()
 
 
 class Grossansicht(tk.Toplevel):
@@ -2803,6 +3025,8 @@ class Grossansicht(tk.Toplevel):
                 "Ansichten zeigen denselben Stand. In das LIMS\n"
                 "geschrieben wird weiter nur mit dem gruenen Knopf\n"
                 "oben im Hauptfenster.")
+        Infozeichen(leiste, "Tastenkuerzel\n\n" + TASTEN,
+                    dezent=True).pack(side="left", padx=(10, 0))
         self.stand = tk.Label(leiste, text="", bg=Style.BG, fg=Style.MUTED,
                               font=Style.font(9), anchor="w")
         self.stand.pack(side="left", padx=(14, 0))
@@ -2813,7 +3037,10 @@ class Grossansicht(tk.Toplevel):
             bei_aenderung=seite._von_hand_geaendert,
             bei_klick=self._angeklickt,
             bei_block=seite._block_eingefuegt,
-            bei_zeile=seite._arbeitszeile_setzen)
+            bei_zeile=seite._arbeitszeile_setzen,
+            bei_fuellen=seite.leere_fuellen,
+            ist_leer=seite.ist_leer,
+            bei_nach_unten=seite._nach_unten_eingefuegt)
         self.tabelle.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         seite.rohansicht_anmelden(self.tabelle)
         # Erst wenn das Fenster seine Masse hat, weiss die Tabelle, wo

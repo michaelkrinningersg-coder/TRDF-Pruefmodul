@@ -19,7 +19,20 @@ ersetzt ihn, ohne vorher loeschen zu muessen. Von dort:
     Esc               verwerfen
 
 Am Zeilenende springt Tab in die naechste Zeile - so laesst sich eine
-Probe in einem Zug durchgehen.
+Probe in einem Zug durchgehen. Dazu wie in Excel:
+
+    Strg+C / Strg+V   Zelle kopieren / einen Block aus Excel einfuegen
+    Strg+D            den Wert der Zelle darueber uebernehmen
+    Strg+Shift+D      den Wert bis ans Ende der Spalte nach unten kopieren
+    Strg+L            dasselbe, aber nur in die leeren Zellen
+    Strg+I            nach unten hochzaehlen: Wert, Wert+1, Wert+2 ...
+    Strg+E            die leeren Zellen der Zeile fuellen
+    Strg+Shift+E      die leeren Zellen der Spalte fuellen
+                      (beides nur, wenn der Aufrufer sagt, womit - siehe
+                      `bei_fuellen`)
+
+Was "leer" heisst, kann der Aufrufer sagen (`ist_leer`): eine Tabelle,
+die eine leere Zelle als "x" anzeigt, weiss es selbst nicht.
 
 Warum ein Textfeld und keine Treeview
 -------------------------------------
@@ -45,6 +58,7 @@ den Rest.
 
 from __future__ import annotations
 
+import decimal
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
@@ -213,6 +227,20 @@ MITWACHSEND_VIELFACHES = 3
 MITWACHSEND_HOECHSTENS = 150
 
 
+def _als_zahl(text):
+    """Eine Zahl aus der Zelle - auch mit Dezimalkomma; sonst None."""
+    try:
+        return decimal.Decimal(str(text).strip().replace(",", "."))
+    except (decimal.InvalidOperation, ValueError):
+        return None
+
+
+def _zahltext(zahl, vorlage: str) -> str:
+    """Eine Zahl so geschrieben wie die Vorlage - Komma bleibt Komma."""
+    text = format(zahl, "f")
+    return text.replace(".", ",") if "," in str(vorlage) else text
+
+
 def zerlegen(inhalt: str) -> list:
     """Was aus der Zwischenablage kommt, als Zeilen und Spalten.
 
@@ -233,7 +261,8 @@ class Eingaberaster(tk.Frame):
     def __init__(self, eltern, hoehe=14, bei_aenderung=None, bei_klick=None,
                  bei_block=None, schriftgroesse=9, zeilenluft=0,
                  bei_verschieben=None, bei_rechtsklick=None,
-                 bei_doppelklick=None, bei_kopfklick=None, bei_zeile=None):
+                 bei_doppelklick=None, bei_kopfklick=None, bei_zeile=None,
+                 bei_fuellen=None, ist_leer=None, bei_nach_unten=None):
         super().__init__(eltern, bg=Style.CARD,
                          highlightbackground=Style.BORDER,
                          highlightthickness=1)
@@ -267,6 +296,14 @@ class Eingaberaster(tk.Frame):
         # kann eine zweite Tabelle mitgehen - etwa die berechneten
         # Groessen ueber den Rohwerten, die dieselbe Probe zeigen.
         self.bei_zeile = bei_zeile
+        # Strg+E: die leeren Zellen der offenen Zeile fuellen. Womit und
+        # welche, weiss der Aufrufer - hier steht nur die Taste.
+        self.bei_fuellen = bei_fuellen
+        # Ob eine Zelle leer ist - ohne Angabe: es steht nichts darin.
+        self.ist_leer = ist_leer
+        # Wohin die Werte gehen, die nach unten kopiert werden. Ohne
+        # Angabe wie ein eingefuegter Block (`bei_block`), sonst einzeln.
+        self.bei_nach_unten = bei_nach_unten
         self.schrift = ("Consolas", schriftgroesse)
         # Luft ueber und unter der Zeile. Eine hohe Zeile liest sich in
         # einer breiten Tabelle leichter, ohne dass die Schrift so gross
@@ -448,6 +485,16 @@ class Eingaberaster(tk.Frame):
         for ereignis in ("<Control-v>", "<Control-V>", "<<Paste>>",
                          "<Shift-Insert>"):
             feld.bind(ereignis, self._eingefuegt)
+        # Gross geschrieben heisst in Tk: mit Shift. Eine eigene Taste
+        # also und nicht dieselbe in zwei Schreibweisen.
+        feld.bind("<Control-d>", lambda e: self.von_oben())
+        feld.bind("<Control-D>", lambda e: self.nach_unten("alle"))
+        feld.bind("<Control-l>", lambda e: self.nach_unten("leere"))
+        feld.bind("<Control-L>", lambda e: self.nach_unten("leere"))
+        feld.bind("<Control-i>", lambda e: self.nach_unten("plus"))
+        feld.bind("<Control-I>", lambda e: self.nach_unten("plus"))
+        feld.bind("<Control-e>", lambda e: self._fuellen())
+        feld.bind("<Control-E>", lambda e: self._fuellen(spaltenweise=True))
         feld.bind("<FocusOut>", lambda e: self._uebernehmen())
         return feld
 
@@ -1663,6 +1710,108 @@ class Eingaberaster(tk.Frame):
         self._aktiv.icursor("end")
         if self.bei_zeile is not None:
             self.bei_zeile(zeile)
+
+    def von_oben(self):
+        """Strg+D: der Wert der Zelle darueber, wie in Excel.
+
+        Die Zelle bleibt offen und zeigt den neuen Wert - wer weiter
+        nach unten kopieren will, geht mit Eingabe eine Zeile tiefer und
+        drueckt noch einmal Strg+D.
+        """
+        if self._offen is None:
+            return "break"
+        zeile, spalte = self._offen
+        stelle = self._reihen.index(zeile)
+        if stelle == 0:
+            return "break"
+        wert = self.wert(self._reihen[stelle - 1], spalte).strip()
+        self._aktiv.delete(0, "end")
+        self._aktiv.insert(0, wert)
+        self._uebernehmen()
+        if self._offen == (zeile, spalte):
+            self._vorher = wert
+            self._aktiv.delete(0, "end")
+            self._aktiv.insert(0, self.wert(zeile, spalte).strip())
+            self._aktiv.select_range(0, "end")
+        return "break"
+
+    def leer(self, zeile, spalte) -> bool:
+        """Ob eine Zelle leer ist - so, wie der Aufrufer es sieht."""
+        if self.ist_leer is not None:
+            return bool(self.ist_leer(str(zeile), str(spalte)))
+        return not self.wert(zeile, spalte).strip()
+
+    def nach_unten(self, art: str = "alle") -> list:
+        """Den Wert der offenen Zelle in die Spalte darunter tragen.
+
+        `art` sagt wie: "alle" kopiert bis ans Ende und ueberschreibt,
+        "leere" kopiert nur in die leeren Zellen, "plus" zaehlt hoch -
+        Wert, Wert+1, Wert+2 - und braucht dafuer eine Zahl. Zurueck
+        kommen die gesetzten Zellen als (Zeile, Spalte, Wert).
+        """
+        if self._offen is None:
+            return []
+        self._uebernehmen()
+        if self._offen is None:
+            return []
+        zeile, spalte = self._offen
+        wert = self.wert(zeile, spalte).strip()
+        darunter = [kennung for kennung
+                    in self._reihen[self._reihen.index(zeile) + 1:]
+                    if self.darf_tippen(kennung, spalte)]
+        gesetzt = []
+        if art == "plus":
+            zahl = _als_zahl(wert)
+            if zahl is None:
+                self.bell()
+                return []
+            for schritt, kennung in enumerate(darunter, start=1):
+                gesetzt.append((kennung, spalte,
+                                _zahltext(zahl + schritt, wert)))
+        else:
+            for kennung in darunter:
+                if art == "leere" and not self.leer(kennung, spalte):
+                    continue
+                if self.wert(kennung, spalte).strip() == wert and \
+                        not self.leer(kennung, spalte):
+                    continue
+                gesetzt.append((kennung, spalte, wert))
+        self._verteilen(gesetzt)
+        return gesetzt
+
+    def _verteilen(self, gesetzt):
+        """Mehrere Zellen auf einmal - der Aufrufer rechnet einmal."""
+        if not gesetzt:
+            return
+        if self.bei_nach_unten is not None:
+            self.bei_nach_unten(gesetzt)
+        elif self.bei_block is not None:
+            self.bei_block(gesetzt)
+        else:
+            for kennung, spalte, wert in gesetzt:
+                self._setzen(kennung, spalte, wert)
+                if self.bei_aenderung is not None:
+                    self.bei_aenderung(kennung, spalte, wert)
+
+    def _fuellen(self, spaltenweise=False):
+        """Strg+E / Strg+Shift+E: leere Zellen der Zeile oder Spalte.
+
+        Welche leer sind und womit gefuellt wird, weiss der Aufrufer.
+        """
+        if self._offen is None or self.bei_fuellen is None:
+            return "break"
+        zeile, spalte = self._offen
+        self._uebernehmen()
+        if spaltenweise:
+            self.bei_fuellen(None, spalte)
+        else:
+            self.bei_fuellen(zeile)
+        if self._offen == (zeile, spalte):
+            self._vorher = self.wert(zeile, spalte)
+            self._aktiv.delete(0, "end")
+            self._aktiv.insert(0, self._vorher)
+            self._aktiv.select_range(0, "end")
+        return "break"
 
     def schliessen(self):
         self._offen = None
