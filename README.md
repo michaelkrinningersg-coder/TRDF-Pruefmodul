@@ -9,8 +9,11 @@ Korrekturen an den Rohwerten in das LIMS zurück.
 Wie LabControl ist es eine portable Anwendung **ohne Installation, ohne
 Server und ohne Internet**.
 
-**Zur Bedienung: [ANLEITUNG.md](ANLEITUNG.md)** (Kurzanleitung mit allen
-Tastenkürzeln).
+**Zur Bedienung: [ANLEITUNG.md](ANLEITUNG.md)** – Kurzanleitung mit Bildern
+und allen Tastenkürzeln, auch als PDF:
+[docs/Anleitung_TRDF-Pruefmodul.pdf](docs/Anleitung_TRDF-Pruefmodul.pdf).
+Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
+`docs/anleitung_pdf.py`).
 
 ## Was drin ist – und was nicht
 
@@ -22,7 +25,7 @@ Tastenkürzeln).
 | Rohwerte von Hand ändern (auch Einfügen aus Excel, Großansicht) | Plotvergleich |
 | **Blockbild** beim Klick auf die Probe | |
 | **LIMS-Export**: *In das LIMS schreiben*, *Sicherung zurueckspielen*, *Anhang angleichen* | |
-| Liste der Probenvorbereitung einfügen – als Option in eigenem Fenster; im LIMS fehlende Werte werden zum Schreiben vorgemerkt | |
+| „Untersuchungsmethode einfuegen …“ (Liste aus der Probenvorbereitung) – als Option in eigenem Fenster; im LIMS fehlende Werte werden zum Schreiben vorgemerkt | |
 | Excel-Kürzel im Raster: Strg+C/V, Strg+D, Strg+Shift+D, Strg+L, Strg+I, Strg+E, Strg+Shift+E | |
 | Info/Legende je Tabelle (gespeichert, beim nächsten Start wieder da), CSV-Blätter inkl. Ergebnisblatt, Streubild TRDF über Kohlenstoff | |
 

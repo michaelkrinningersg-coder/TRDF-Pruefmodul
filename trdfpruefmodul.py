@@ -109,8 +109,13 @@ class PruefmodulAnwendung(tk.Tk):
                  background=[("selected", Style.CARD)],
                  foreground=[("selected", Style.ACCENT)],
                  font=[("selected", Style.font(10, "bold"))])
+        # Eine gewaehlte Methode bleibt markiert, solange das Feld den
+        # Fokus hat - und im clam-Thema hiesse das weisse Schrift auf
+        # weissem Grund: das Feld saehe leer aus, obwohl etwas gewaehlt ist.
         stil.map("TCombobox", fieldbackground=[("readonly", "#ffffff")],
-                 background=[("readonly", "#ffffff")])
+                 background=[("readonly", "#ffffff")],
+                 selectbackground=[("readonly", "#dbeafe")],
+                 selectforeground=[("readonly", Style.TEXT)])
         stil.configure("TCheckbutton", background=Style.BG, foreground=Style.TEXT,
                        font=Style.font(9), focuscolor=Style.BG)
         stil.map("TCheckbutton", background=[("active", Style.BG)],

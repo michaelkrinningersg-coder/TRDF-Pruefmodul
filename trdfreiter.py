@@ -162,7 +162,7 @@ ZEILENLUFT = 3
 BERECHNETE_AN = "an"
 BERECHNETE_AUS = "aus"
 BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen"
-EINFUEGEN_TEXT = "Probenvorbereitung einfuegen ..."
+EINFUEGEN_TEXT = "Untersuchungsmethode einfuegen ..."
 BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
@@ -483,9 +483,12 @@ class TrdfSeite(tk.Frame):
                 "TRDF3.2 fuer den Boden und TRDF3.2 fuer den Humus sind\n"
                 "zwei UM_ID. Wo zwei dasselbe Kuerzel tragen, steht die\n"
                 "UM_ID dabei.")
-        self.auskunft = tk.Label(wahl, text="", bg=Style.CARD, fg=Style.MUTED,
-                                 font=Style.font(9), anchor="w")
-        self.auskunft.grid(row=0, column=5, sticky="w")
+        # Was gerade geladen ist - Methode und Probenart - steht in der
+        # Titelzeile; in der Auswahlzeile ist dafuer kein Platz.
+        self.auskunft = tk.Label(titel, text="", bg=Style.CARD,
+                                 fg=Style.MUTED, font=Style.font(9),
+                                 anchor="w")
+        self.auskunft.pack(side="left", padx=(16, 0))
         wahl.grid_columnconfigure(5, weight=1)
         self.knopf_export = RoundedButton(
             titel, text="In das LIMS schreiben", width=200, height=28,
@@ -509,7 +512,7 @@ class TrdfSeite(tk.Frame):
         # eigenes Fenster - so bekommt sie den ganzen Platz und nimmt der
         # Seite keinen weg.
         self.knopf_quelle = RoundedButton(
-            wahl, text="", width=210, height=28, bg="#334155",
+            wahl, text="", width=200, height=28, bg="#334155",
             command=self._quelle_wechseln)
         self.knopf_quelle.grid(row=0, column=7, sticky="e")
         ToolTip(self.knopf_quelle,
@@ -519,11 +522,12 @@ class TrdfSeite(tk.Frame):
                 "der Stelle, aus der das LIMS selbst rechnet.\n"
                 "Von Hand geaenderte Werte stechen in beiden Faellen.")
         self.knopf_einfuegen = RoundedButton(
-            wahl, text=EINFUEGEN_TEXT, width=270, height=28,
+            wahl, text=EINFUEGEN_TEXT, width=310, height=28,
             bg="#334155", command=self.einfuegen_oeffnen)
         self.knopf_einfuegen.grid(row=0, column=6, sticky="e", padx=(0, 8))
         ToolTip(self.knopf_einfuegen,
-                "Optional: die Liste aus der Probenvorbereitung einfuegen\n"
+                "Optional: die Untersuchungsmethode aus der\n"
+                "Probenvorbereitung einfuegen\n"
                 "(dort \u201eaktueller Block\u201c -> kopieren). Oeffnet ein\n"
                 "eigenes Fenster. Werte, die im LIMS noch fehlen, werden\n"
                 "beim Uebernehmen zum Schreiben vorgemerkt.")
@@ -1247,16 +1251,30 @@ class TrdfSeite(tk.Frame):
         self.feld_methode.config(values=texte, state="readonly")
         if len(texte) == 1:
             self.v_methode.set(texte[0])
+            self._methodenfeld_freigeben()
             self._abrufen()
             return
         self.v_methode.set("")
         namen = ", ".join(texte)
         self._melden(f"Die Serie {serie} fuehrt {len(texte)} TRDF-Methoden "
                      f"({namen}) - bitte eine waehlen.", Style.WARN)
-        self.feld_methode.focus_set()
 
     def _methode_gewaehlt(self):
+        self._methodenfeld_freigeben()
         self._abrufen()
+
+    def _methodenfeld_freigeben(self):
+        """Fokus und Markierung weg vom Methodenfeld.
+
+        Im clam-Thema zeichnet ein schreibgeschuetztes Auswahlfeld mit
+        Fokus seinen Text nicht sichtbar - die gewaehlte Methode saehe
+        aus wie keine. Ohne Fokus steht sie da.
+        """
+        try:
+            self.feld_methode.selection_clear()
+            self.focus_set()
+        except tk.TclError:
+            pass
 
     def gewaehlte_methode(self) -> tuple:
         """(UM_ID, Kuerzel) der gewaehlten Methode - (None, "") ohne.
@@ -2931,7 +2949,7 @@ class Einfuegefenster(tk.Toplevel):
         super().__init__(seite)
         self.seite = seite
         serie = seite.v_serie.get().strip()
-        self.title("Liste aus der Probenvorbereitung"
+        self.title("Untersuchungsmethode einfuegen"
                    + (f" - Serie {serie}" if serie else ""))
         self.configure(bg=Style.BG)
         self.geometry("1200x720")

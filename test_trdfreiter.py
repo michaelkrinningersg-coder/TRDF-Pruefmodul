@@ -2221,6 +2221,24 @@ def test_spaltenkoepfe_und_beschreibungen_ueberstehen_den_neustart() -> None:
     mit_fenster(pruefen)
 
 
+def test_ein_geaenderter_wert_steht_rot_und_nicht_grau() -> None:
+    """Der neue Text erbte frueher die Tags der Trennstriche daneben -
+    und stand blassgrau statt rot da."""
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        blatt._von_hand_geaendert("26B0005", "GMSZ", "850")
+        tabelle = blatt.rohtabelle
+        nummer = tabelle._reihen.index("26B0005") + 1
+        feld = tabelle._wo("GMSZ")
+        von = tabelle._anfang["GMSZ"]
+        for stelle in range(von, von + tabelle._breiten["GMSZ"]):
+            tags = feld.tag_names(f"{nummer}.{stelle}")
+            assert "trenner" not in tags, (stelle, tags)
+        assert "geaendert" in feld.tag_names(
+            f"{nummer}.{von + tabelle._breiten['GMSZ'] - 1}")
+    mit_fenster(pruefen)
+
+
 # --------------------------------------------------- Die Grossansicht
 
 def eingetippt(tabelle, zeile, spalte, wert):

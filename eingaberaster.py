@@ -1845,7 +1845,10 @@ class Eingaberaster(tk.Frame):
         if laenge < bis:
             feld.insert(f"{nummer}.end", " " * (bis - laenge))
         feld.delete(f"{nummer}.{von}", f"{nummer}.{bis}")
-        feld.insert(f"{nummer}.{von}", self._gesetzt(wert, spalte))
+        # Ohne Tags einfuegen: sonst erbt der neue Text die Tags der
+        # Nachbarzeichen - die Trennstriche links und rechts -, und eine
+        # eben geaenderte Zahl stuende blassgrau statt rot da.
+        feld.insert(f"{nummer}.{von}", self._gesetzt(wert, spalte), ())
         feld.configure(state="disabled")
         self._zelle_faerben(zeile, spalte, self._marken.get((zeile, spalte)))
 
