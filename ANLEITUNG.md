@@ -26,18 +26,24 @@ Danach stehen Methode und Probenart oben neben der Überschrift. Die Statuszeile
 
 ![Serie geladen](docs/bilder/03_serie_geladen.png)
 
-## 3. Werte noch nicht im LIMS? UM einfügen
+## 3. Werte im LIMS noch nicht gespeichert? UM einfügen
 
-1. Oben rechts **„UM einfuegen …“** klicken. Es öffnet sich ein eigenes, großes Fenster.
-2. In der Probenvorbereitung **aktueller Block → kopieren**.
-3. Im Fenster mit **Strg+V** einfügen und **Uebernehmen** klicken.
+Sind die Rohwerte im LIMS noch nicht gespeichert, kommen sie aus der Probenvorbereitung:
+
+1. In der Probenvorbereitung **aktueller Block → kopieren**.
+2. Im Prüfmodul oben rechts **„UM einfuegen …“** klicken. Es öffnet sich ein eigenes Fenster.
+3. Mit **Strg+V** einfügen und **Uebernehmen** klicken.
 
 ![UM einfügen](docs/bilder/04_einfuegen.png)
 
-* Die **Quelle wird automatisch erkannt**: Sobald eine UM übernommen ist, wird mit ihr gerechnet. Ohne eingefügte UM wird mit den Rohwerten aus dem LIMS gerechnet. Oben rechts steht, was gerade gilt („Rohwerte aus: LIMS“ bzw. „Rohwerte aus: eingefuegter UM“).
-* **Leeren** im Fenster schaltet zurück auf das LIMS. Wo die UM keinen Wert hat, gilt der Wert aus dem LIMS.
-* Werte, die im LIMS **noch fehlen**, werden übernommen und **rot** für den Export vorgemerkt.
-* Werte, die **schon im LIMS stehen**, werden nicht überschrieben; Abweichungen sind **amber** markiert.
+Danach
+* wird **mit den eingefügten Werten gerechnet**; oben rechts steht „Rohwerte aus: eingefuegter UM“,
+* sind die Werte, die im LIMS noch fehlen, **rot** für den **Export** vorgemerkt (Abschnitt 7),
+* lassen sich alle Werte noch **ändern** (Abschnitt 4).
+
+Gut zu wissen:
+* Werte, die schon im LIMS stehen, werden nicht überschrieben; weicht die eingefügte UM davon ab, ist die Zelle **amber** markiert.
+* **Leeren** im Fenster schaltet zurück auf die Rohwerte aus dem LIMS.
 * Der eingefügte Inhalt bleibt erhalten, auch wenn das Fenster geschlossen wird.
 
 ## 4. Werte ändern – wie in Excel, mit Live-Rechnung

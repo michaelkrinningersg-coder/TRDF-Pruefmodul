@@ -2976,8 +2976,12 @@ class Einfuegefenster(tk.Toplevel):
         kopf.pack(fill="x", padx=10, pady=(8, 4))
         self.hinweis = tk.Label(kopf, text=getattr(seite, "quellhinweis", ""),
                                 bg=Style.BG, fg=Style.MUTED,
-                                font=Style.font(9), anchor="w")
-        self.hinweis.pack(side="left")
+                                font=Style.font(9), anchor="w",
+                                justify="left")
+        self.hinweis.pack(side="left", fill="x", expand=True)
+        # Der Hinweis bricht an der Fensterbreite um, statt abzureissen.
+        kopf.bind("<Configure>", lambda e: self.hinweis.config(
+            wraplength=max(200, e.width - 10)))
         knoepfe = tk.Frame(self, bg=Style.BG)
         knoepfe.pack(side="bottom", fill="x", padx=10, pady=8)
         RoundedButton(knoepfe, text="Uebernehmen", width=150, height=32,
