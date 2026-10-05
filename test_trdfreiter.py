@@ -1053,83 +1053,80 @@ def test_das_blatt_als_csv_bleibt_vollstaendig():
     mit_fenster(pruefen)
 
 
-# ------------------------------------------------------- Die zweite Quelle
+# ------------------------------------------- Die Quelle - von selbst
 
-def test_zu_beginn_gilt_die_eingefuegte_liste():
+# Eine eingefuegte UM aus der Probenvorbereitung, so wie sie aus
+# "aktueller Block -> kopieren" kommt - mit einem Wert fuer 26B0011.
+UM_TEXT = "\n".join([
+    "Serie\t2026B051",
+    "Untersuchungsmethode\tTRDF3.2",
+    "\t\t\t\t\tSortier # -->\t1",
+    "LNR\tText\tProbenummer\tUM\tMe\tFaktor\tTRDFgesch lang",
+    "\t\t\t\t\t\tg/cm3",
+    "11\t\t26B0011\t1\t1\t1,0000\t1,5",
+])
+
+
+def test_ohne_eingefuegte_um_gilt_das_lims():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(11,))
-        assert blatt.quelle == trdfreiter.QUELLE_TEXT
+        assert blatt.quelle == trdfreiter.QUELLE_LIMS
         assert blatt.aus_der_quelle("26B0011", "TRDFgesch") is None
-    mit_fenster(pruefen)
-
-
-def test_umgeschaltet_kommen_die_rohwerte_aus_dem_anhang():
-    def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        blatt._quelle_wechseln()
-        assert blatt.quelle == trdfreiter.QUELLE_ANHANG
-        assert blatt.aus_der_quelle("26B0011", "TRDFgesch") == "1,8"
         assert blatt.rohwert("26B0011", "TRDFgesch") == "1,8"
+        assert blatt.quellanzeige.cget("text") == "Rohwerte aus: LIMS"
+        # Kein Knopf mehr zum Umschalten - es ergibt sich von selbst.
+        assert not hasattr(blatt, "knopf_quelle")
     mit_fenster(pruefen)
 
 
-def test_die_rechnung_folgt_der_quelle():
+def test_eine_uebernommene_um_wird_zur_quelle():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(11,))
-        # Im Anhang steht etwas anderes als in der Ergebniszeile.
-        blatt.anhang[("26B0011", "TRDFgesch")]["mw"] = "1,5"
-        assert blatt.gerechnet("26B0011")["TRD_TRDF"] == D("1.8")
-        blatt._quelle_wechseln()
+        blatt._einfuegetext = UM_TEXT
+        assert blatt._text_uebernehmen() is True
+        assert blatt.quelle == trdfreiter.QUELLE_TEXT
+        assert blatt.rohwert("26B0011", "TRDFgesch") == "1,5"
         assert blatt.gerechnet("26B0011")["TRD_TRDF"] == D("1.5")
+        assert "eingefuegter UM" in blatt.quellanzeige.cget("text")
+        assert "gerechnet wird mit dieser Liste" in blatt.stand.cget("text")
+        # Im LIMS steht 1,8 - die Liste ist ein Vergleich, amber.
+        assert blatt.rohtabelle.marke("26B0011", "TRDFgesch") == "abweichung"
+        # Wo die Liste nichts sagt, gilt weiter das LIMS.
+        assert blatt.rohwert("26B0011", "DichteGB") == "2,3"
+        assert "1 von 16" in blatt._quellstand()
     mit_fenster(pruefen)
 
 
-def test_von_hand_sticht_auch_die_lims_rohdaten():
+def test_leeren_schaltet_zurueck_auf_das_lims():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(11,))
-        blatt._quelle_wechseln()
+        blatt._einfuegetext = UM_TEXT
+        blatt._text_uebernehmen()
+        blatt._text_leeren()
+        assert blatt.quelle == trdfreiter.QUELLE_LIMS
+        assert blatt.rohwert("26B0011", "TRDFgesch") == "1,8"
+        assert blatt.quellanzeige.cget("text") == "Rohwerte aus: LIMS"
+        assert "LIMS" in blatt.stand.cget("text")
+    mit_fenster(pruefen)
+
+
+def test_eine_leere_einfuegung_aendert_die_quelle_nicht():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        blatt._einfuegetext = "   "
+        assert blatt._text_uebernehmen() is False
+        assert blatt.quelle == trdfreiter.QUELLE_LIMS
+    mit_fenster(pruefen)
+
+
+def test_von_hand_sticht_auch_die_eingefuegte_um():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        blatt._einfuegetext = UM_TEXT
+        blatt._text_uebernehmen()
         blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
         assert blatt.rohwert("26B0011", "TRDFgesch") == "1,2"
         assert blatt.gerechnet("26B0011")["TRD_TRDF"] == D("1.2")
-    mit_fenster(pruefen)
-
-
-def test_eine_luecke_in_der_quelle_faellt_auf_die_ergebniszeile_zurueck():
-    def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        blatt._quelle_wechseln()
-        del blatt.anhang[("26B0011", "DichteGB")]
-        assert blatt.rohwert("26B0011", "DichteGB") == "2,3"
-    mit_fenster(pruefen)
-
-
-def test_der_knopf_nennt_die_quelle_und_die_andere():
-    def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        assert trdfreiter.QUELLE_TEXT in blatt.knopf_quelle.cget("text")
-        blatt._quelle_wechseln()
-        assert trdfreiter.QUELLE_ANHANG in blatt.knopf_quelle.cget("text")
-        assert "Rohdaten aus" in blatt.stand.cget("text")
-        assert trdfreiter.QUELLE_ANHANG in blatt.stand.cget("text")
-    mit_fenster(pruefen)
-
-
-def test_der_stand_zaehlt_die_belegten_zellen():
-    def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        blatt._quelle_wechseln()
-        # Zeile 11 hat neun belegte Rohwerte von sechzehn.
-        satz = blatt._quellstand()
-        assert "9 von 16" in satz
-    mit_fenster(pruefen)
-
-
-def test_die_abweichung_zeigt_auf_die_gewaehlte_quelle():
-    def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        blatt.anhang[("26B0011", "DichteGB")]["mw"] = "2,9"
-        blatt._quelle_wechseln()
-        assert blatt.rohtabelle.marke("26B0011", "DichteGB") == "abweichung"
     mit_fenster(pruefen)
 
 
@@ -1846,7 +1843,7 @@ def test_die_liste_der_probenvorbereitung_hat_ein_eigenes_fenster() -> None:
 
 def test_was_im_lims_fehlt_wird_aus_der_liste_vorgemerkt() -> None:
     """Rohwerte, die im LIMS noch nicht stehen, kommen aus der Liste -
-    und gehen ueber \u201eIn das LIMS schreiben\u201c dorthin. Ein
+    und gehen ueber \u201eExport\u201c dorthin. Ein
     gebuchter Wert wird nicht still ersetzt."""
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(5, 11))

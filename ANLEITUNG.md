@@ -26,15 +26,17 @@ Danach stehen Methode und Probenart oben neben der Überschrift. Die Statuszeile
 
 ![Serie geladen](docs/bilder/03_serie_geladen.png)
 
-## 3. Werte noch nicht im LIMS? Untersuchungsmethode einfügen
+## 3. Werte noch nicht im LIMS? UM einfügen
 
-1. Oben rechts **„Untersuchungsmethode einfuegen …“** klicken. Es öffnet sich ein eigenes, großes Fenster.
+1. Oben rechts **„UM einfuegen …“** klicken. Es öffnet sich ein eigenes, großes Fenster.
 2. In der Probenvorbereitung **aktueller Block → kopieren**.
 3. Im Fenster mit **Strg+V** einfügen und **Uebernehmen** klicken.
 
-![Untersuchungsmethode einfügen](docs/bilder/04_einfuegen.png)
+![UM einfügen](docs/bilder/04_einfuegen.png)
 
-* Werte, die im LIMS **noch fehlen**, werden übernommen und **rot** zum Senden vorgemerkt.
+* Die **Quelle wird automatisch erkannt**: Sobald eine UM übernommen ist, wird mit ihr gerechnet. Ohne eingefügte UM wird mit den Rohwerten aus dem LIMS gerechnet. Oben rechts steht, was gerade gilt („Rohwerte aus: LIMS“ bzw. „Rohwerte aus: eingefuegter UM“).
+* **Leeren** im Fenster schaltet zurück auf das LIMS. Wo die UM keinen Wert hat, gilt der Wert aus dem LIMS.
+* Werte, die im LIMS **noch fehlen**, werden übernommen und **rot** für den Export vorgemerkt.
 * Werte, die **schon im LIMS stehen**, werden nicht überschrieben; Abweichungen sind **amber** markiert.
 * Der eingefügte Inhalt bleibt erhalten, auch wenn das Fenster geschlossen wird.
 
@@ -126,7 +128,7 @@ Der Reiter **Ergebnisse** zeigt je Größe nebeneinander, was im LIMS gebucht is
 
 ### Senden
 
-**In das LIMS schreiben** (grüner Knopf oben rechts) klicken. Gesendet werden:
+**Export** (grüner Knopf oben rechts) klicken. Gesendet werden:
 * jeder **von Hand geänderte** Rohwert, der vom LIMS abweicht,
 * jeder aus der eingefügten Untersuchungsmethode **vorgemerkte** Wert,
 * jede **berechnete Größe**, die sich dadurch verschoben hat.
@@ -161,7 +163,7 @@ Darüber stehen Serie, Zeitpunkt, Anzahl und der Pfad der Sicherung. **Bericht a
 
 ### Rückgängig machen
 
-**Sicherung zurueckspielen** klicken und die Datei aus `trdf_backup` wählen. Dieselbe Übersicht zeigt jetzt den umgekehrten Weg: „Wert neu“ ist der Stand von vor der Korrektur. **Zurueckspielen** stellt Ergebniszeile und Teilprobenanhang wieder her.
+**Load backup** klicken und die Datei aus `trdf_backup` wählen. Dieselbe Übersicht zeigt jetzt den umgekehrten Weg: „Wert neu“ ist der Stand von vor der Korrektur. **Zurueckspielen** stellt Ergebniszeile und Teilprobenanhang wieder her.
 
 ![Sicherung zurückspielen](docs/bilder/13_zurueckspielen.png)
 

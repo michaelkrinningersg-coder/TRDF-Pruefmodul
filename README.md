@@ -24,8 +24,8 @@ Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
 | Reiter *Rohwerte*, *Ergebnisse*, *Pruefung*, *Exportbericht* | Profilansichten (Profil-CSV, Plot/Tiefenstufe, Profilfenster) |
 | Rohwerte von Hand ändern (auch Einfügen aus Excel, Großansicht) | Plotvergleich |
 | **Blockbild** beim Klick auf die Probe | |
-| **LIMS-Export**: *In das LIMS schreiben*, *Sicherung zurueckspielen*, *Anhang angleichen* | |
-| „Untersuchungsmethode einfuegen …“ (Liste aus der Probenvorbereitung) – als Option in eigenem Fenster; im LIMS fehlende Werte werden zum Schreiben vorgemerkt | |
+| **LIMS-Export**: *Export*, *Load backup*, *Anhang angleichen* | |
+| „UM einfuegen …“ (Liste aus der Probenvorbereitung) – als Option in eigenem Fenster; ist eine UM eingefügt, wird automatisch mit ihr gerechnet, sonst mit dem LIMS; im LIMS fehlende Werte werden zum Export vorgemerkt | |
 | Excel-Kürzel im Raster: Strg+C/V, Strg+D, Strg+Shift+D, Strg+L, Strg+I, Strg+E, Strg+Shift+E | |
 | Info/Legende je Tabelle (gespeichert, beim nächsten Start wieder da), CSV-Blätter inkl. Ergebnisblatt, Streubild TRDF über Kohlenstoff | |
 
@@ -55,7 +55,7 @@ Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
 
    Die Erklärtexte stehen hinter den kleinen **i** neben Überschrift und
    Knopfleisten (Maus darauf oder Klick).
-5. **In das LIMS schreiben** – eine Übersicht zeigt Zeile für Zeile alt und
+5. **Export** – eine Übersicht zeigt Zeile für Zeile alt und
    neu; erst nach Bestätigung wird der alte Stand in `trdf_backup` gesichert
    und dann geschrieben (Ergebniszeile und Teilprobenanhang in einer
    Transaktion, danach wird nachgelesen).

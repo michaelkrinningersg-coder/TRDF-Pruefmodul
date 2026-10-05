@@ -26,12 +26,12 @@ mit der Wahl geholt.
 
 Zwei Wege zu den Rohwerten
 --------------------------
-Die Liste aus der Probenvorbereitung laesst sich einfuegen - damit
-prueft man, ob die Uebernahme ins LIMS stimmt. Oder die Rohwerte kommen
-aus dem Teilprobenanhang, also aus der Stelle, aus der das LIMS selbst
-rechnet - damit prueft man die Rechnung, ohne eine Datei zu brauchen.
-Der Knopf ueber dem Einfuegefeld schaltet um; von Hand geaenderte Werte
-stechen in beiden Faellen.
+Die Untersuchungsmethode aus der Probenvorbereitung laesst sich
+einfuegen ("UM einfuegen") - damit prueft man, ob die Uebernahme ins
+LIMS stimmt. Sonst kommen die Rohwerte aus dem Teilprobenanhang, also
+aus der Stelle, aus der das LIMS selbst rechnet. Welcher Weg gilt,
+ergibt sich von selbst: ist eine UM eingefuegt, gilt sie. Von Hand
+geaenderte Werte stechen in beiden Faellen.
 
 Drei Unterreiter, und warum es drei sind
 -----------------------------------------
@@ -48,7 +48,7 @@ Die Rohwerte lassen sich ueberschreiben. Damit laesst sich die Frage
 beantworten, die beim Pruefen als naechstes kommt: "und wenn hier 1,8
 staende - kaeme dann das heraus, was gebucht ist?" Gerechnet und
 geprueft wird sofort neu. In das LIMS geht eine Aenderung erst ueber den
-Knopf "In das LIMS schreiben" - nach einer bestaetigten Uebersicht und
+Knopf "Export" - nach einer bestaetigten Uebersicht und
 einer Sicherung (trdfexport.py).
 """
 
@@ -81,21 +81,23 @@ STELLEN = 3
 # vollen Wert, wie ihn das LIMS liefert.
 STELLEN_WGH = 1
 
-# Woher die Rohwerte kommen, mit denen gerechnet wird. Zwei Wege, und
-# sie beantworten verschiedene Fragen:
+# Woher die Rohwerte kommen, mit denen gerechnet wird - es ergibt sich
+# von selbst:
 #
-#   "Standard"      die eingefuegte Liste aus der Probenvorbereitung -
-#                   was das Labor gemessen hat, bevor es im LIMS stand.
-#                   Damit prueft man, ob die Uebernahme stimmt.
-#   "LIMS-Rohdaten" die Rohwerte am Teilprobenanhang - die Stelle, aus
-#                   der das LIMS selbst rechnet. Damit prueft man die
-#                   Rechnung, ohne eine Datei zu brauchen.
+#   eingefuegte UM  die Liste aus der Probenvorbereitung, sobald eine
+#                   eingefuegt und uebernommen ist. Damit prueft man,
+#                   ob die Uebernahme ins LIMS stimmt.
+#   LIMS            sonst die Rohwerte der Ergebniszeilen im LIMS.
 #
-# In beiden Faellen steht daneben, was in der Ergebnistabelle gebucht
-# ist; von Hand geaenderte Werte stechen immer.
-QUELLE_TEXT = "Standard"
-QUELLE_ANHANG = "LIMS-Rohdaten"
-QUELLEN = (QUELLE_TEXT, QUELLE_ANHANG)
+# Wo die eingefuegte UM eine Luecke hat, tritt das LIMS ein; von Hand
+# geaenderte Werte stechen immer. "Leeren" im Einfuegefenster schaltet
+# zurueck auf das LIMS. Ob der Teilprobenanhang - aus ihm rechnet das
+# LIMS - dasselbe sagt wie die Ergebniszeile, prueft die Rohwertpruefung
+# ohnehin ("Rohwert am Anhang weicht ab"), und "Anhang angleichen"
+# bringt beides zusammen.
+QUELLE_TEXT = "eingefuegte UM"
+QUELLE_LIMS = "LIMS"
+QUELLEN = (QUELLE_TEXT, QUELLE_LIMS)
 
 # Die Probenart steckt im Seriennamen: 2026B051 - das Zeichen hinter
 # der Jahreszahl. Dieselben Namen wie in der Tabelle PROBENART des
@@ -162,7 +164,7 @@ ZEILENLUFT = 3
 BERECHNETE_AN = "an"
 BERECHNETE_AUS = "aus"
 BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen"
-EINFUEGEN_TEXT = "Untersuchungsmethode einfuegen ..."
+EINFUEGEN_TEXT = "UM einfuegen ..."
 BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
@@ -405,7 +407,7 @@ class TrdfSeite(tk.Frame):
         self.aufschluss = {}         # probe -> {"Cges", "CO3"}
         self.aufschlussherkunft = {}  # (probe, Name) -> woher der Wert kam
         self.eingefuegt = {}         # probe -> Formelkuerzel -> Text
-        self.quelle = QUELLE_TEXT    # woher die Rohwerte kommen
+        self.quelle = QUELLE_LIMS    # woher die Rohwerte kommen - von selbst
         self.vonhand = {}            # (probe, Formelkuerzel) -> Text
         self.zeilen = {}             # (probe, Kuerzel) -> Ergebniszeile
         self.anhang = {}             # (probe, Kuerzel) -> Zeile am Anhang
@@ -438,7 +440,7 @@ class TrdfSeite(tk.Frame):
             "traegt.",
             "Rohwerte lassen sich von Hand aendern - dann wird sofort neu "
             "gerechnet; in das LIMS geht eine Aenderung erst ueber "
-            "\u201eIn das LIMS schreiben\u201c."))
+            "\u201eExport\u201c."))
         self.info_kopf.pack(side="left", padx=(8, 0))
         wahl = tk.Frame(kopf, bg=Style.CARD)
         wahl.pack(fill="x")
@@ -491,11 +493,11 @@ class TrdfSeite(tk.Frame):
         self.auskunft.pack(side="left", padx=(16, 0))
         wahl.grid_columnconfigure(5, weight=1)
         self.knopf_export = RoundedButton(
-            titel, text="In das LIMS schreiben", width=200, height=28,
+            titel, text="Export", width=120, height=28,
             bg="#15803d", command=self._lims_schreiben)
         self.knopf_export.pack(side="right")
         self.knopf_zurueck = RoundedButton(
-            titel, text="Sicherung zurueckspielen", width=210, height=28,
+            titel, text="Load backup", width=140, height=28,
             bg="#6b7268", command=self._zurueckspielen)
         self.knopf_zurueck.pack(side="right", padx=(0, 10))
         ToolTip(self.knopf_zurueck,
@@ -503,7 +505,8 @@ class TrdfSeite(tk.Frame):
                 "den Stand wieder her, der vor der Korrektur im LIMS\n"
                 "stand - Ergebniszeile und Teilprobenanhang.")
         ToolTip(self.knopf_export,
-                "Schreibt die von Hand geaenderten Werte und die Groessen,\n"
+                "Export in das LIMS: schreibt die von Hand geaenderten\n"
+                "und die vorgemerkten Werte und die Groessen,\n"
                 "die sich dadurch verschoben haben, in das LIMS zurueck.\n"
                 "Vorher zeigt eine Uebersicht Zeile fuer Zeile, was alt und\n"
                 "was neu waere; der alte Stand geht in eine Sicherung.")
@@ -511,26 +514,30 @@ class TrdfSeite(tk.Frame):
         # Die Liste aus der Probenvorbereitung ist eine Option und hat ihr
         # eigenes Fenster - so bekommt sie den ganzen Platz und nimmt der
         # Seite keinen weg.
-        self.knopf_quelle = RoundedButton(
-            wahl, text="", width=200, height=28, bg="#334155",
-            command=self._quelle_wechseln)
-        self.knopf_quelle.grid(row=0, column=7, sticky="e")
-        ToolTip(self.knopf_quelle,
+        # Woher die Rohwerte kommen, ergibt sich von selbst: ist eine UM
+        # eingefuegt, gilt sie, sonst das LIMS. Hier steht nur, was gilt.
+        self.quellanzeige = tk.Label(wahl, text="", bg=Style.CARD,
+                                     fg=Style.MUTED, font=Style.font(9),
+                                     anchor="e")
+        self.quellanzeige.grid(row=0, column=7, sticky="e")
+        ToolTip(self.quellanzeige,
                 "Woher die Rohwerte kommen, mit denen gerechnet wird.\n"
-                "Ein Klick wechselt zwischen der eingefuegten Liste der\n"
-                "Probenvorbereitung und dem Teilprobenanhang des LIMS -\n"
-                "der Stelle, aus der das LIMS selbst rechnet.\n"
-                "Von Hand geaenderte Werte stechen in beiden Faellen.")
+                "Ist eine Untersuchungsmethode eingefuegt (\u201eUM einfuegen\u201c),\n"
+                "gilt sie; sonst die Rohwerte des LIMS.\n"
+                "\u201eLeeren\u201c im Einfuegefenster schaltet zurueck\n"
+                "auf das LIMS.\n"
+                "Von Hand geaenderte Werte stechen immer.")
         self.knopf_einfuegen = RoundedButton(
-            wahl, text=EINFUEGEN_TEXT, width=310, height=28,
+            wahl, text=EINFUEGEN_TEXT, width=170, height=28,
             bg="#334155", command=self.einfuegen_oeffnen)
         self.knopf_einfuegen.grid(row=0, column=6, sticky="e", padx=(0, 8))
         ToolTip(self.knopf_einfuegen,
                 "Optional: die Untersuchungsmethode aus der\n"
                 "Probenvorbereitung einfuegen\n"
                 "(dort \u201eaktueller Block\u201c -> kopieren). Oeffnet ein\n"
-                "eigenes Fenster. Werte, die im LIMS noch fehlen, werden\n"
-                "beim Uebernehmen zum Schreiben vorgemerkt.")
+                "eigenes Fenster. Nach \u201eUebernehmen\u201c wird mit dieser\n"
+                "Liste gerechnet; Werte, die im LIMS noch fehlen, werden\n"
+                "fuer den Export vorgemerkt.")
 
         # Die Statuszeile steht immer da - sie sagt, was gerade geschieht.
         self.stand = tk.Label(kopf, text="", bg=Style.CARD, fg=Style.MUTED,
@@ -1542,8 +1549,15 @@ class TrdfSeite(tk.Frame):
         if fenster is not None and fenster.winfo_exists():
             fenster.textfeld.delete("1.0", "end")
         self.eingefuegt = {}
+        self._quelle_bestimmen()
         self._rechnung_vergessen()
         self._zeigen()
+        for probe in list(self.bloecke):
+            self._block_auffrischen(probe)
+        # Nach dem Neuzeichnen: das schreibt sonst seine eigene Zeile
+        # darueber.
+        self._melden("Die eingefuegte UM ist geleert - gerechnet wird mit "
+                     "den Rohwerten aus dem LIMS.", Style.TEXT)
 
     def _text_uebernehmen(self) -> bool:
         """Die eingefuegte Liste lesen - zurueck kommt, ob es geklappt hat."""
@@ -1564,9 +1578,11 @@ class TrdfSeite(tk.Frame):
                 self.rohnamen[name]: wert
                 for name, wert in zeile["werte"].items()
                 if name in self.rohnamen}
+        self._quelle_bestimmen()
         vorgemerkt = self._fehlende_vormerken()
         satz = (f"{len(self.eingefuegt)} Proben eingefuegt "
-                f"(Serie {gelesen['serie']}, {gelesen['methode']})")
+                f"(Serie {gelesen['serie']}, {gelesen['methode']}) - "
+                f"gerechnet wird mit dieser Liste")
         if vorgemerkt:
             satz += (f"  |  {vorgemerkt} Werte, die im LIMS noch fehlen, "
                      f"zum Schreiben vorgemerkt")
@@ -1577,11 +1593,13 @@ class TrdfSeite(tk.Frame):
         if unbekannt:
             satz += ("  |  ohne Zuordnung: " + ", ".join(unbekannt))
             farbe = Style.WARN
-        self._melden(satz, farbe)
         self._rechnung_vergessen()
         self._zeigen()
         for probe in list(self.bloecke):
             self._block_auffrischen(probe)
+        # Erst jetzt: das Neuzeichnen schreibt sonst "x von y Werten
+        # stimmen" darueber, und die Auskunft ueber die Liste waere weg.
+        self._melden(satz, farbe)
         return True
 
     def _fehlende_vormerken(self) -> int:
@@ -1589,7 +1607,7 @@ class TrdfSeite(tk.Frame):
 
         Steht ein Rohwert im LIMS noch gar nicht, ist die Liste die
         einzige Quelle - er wird vorgemerkt wie eine Handeingabe: rot,
-        aenderbar und ueber \u201eIn das LIMS schreiben\u201c schickbar.
+        aenderbar und ueber \u201eExport\u201c schickbar.
         Steht dort schon etwas, bleibt die Liste ein Vergleich (amber):
         ein gebuchter Wert wird nicht still durch einen eingefuegten
         ersetzt. Was schon von Hand dasteht, sticht.
@@ -1611,30 +1629,30 @@ class TrdfSeite(tk.Frame):
         return vorgemerkt
 
     # ----------------------------------------------------------- Die Quelle
-    def _quelle_wechseln(self):
-        """Zwischen der eingefuegten Liste und den LIMS-Rohdaten wechseln."""
-        andere = QUELLEN[(QUELLEN.index(self.quelle) + 1) % len(QUELLEN)]
-        self.quelle = andere
+    def _quelle_bestimmen(self):
+        """Welche Quelle gilt - von selbst, nach dem, was eingefuegt ist.
+
+        Ist eine UM eingefuegt und uebernommen, wird mit ihr gerechnet;
+        sonst mit den Rohwerten des LIMS.
+        """
+        self.quelle = QUELLE_TEXT if self.eingefuegt else QUELLE_LIMS
         self._quelle_zeigen()
-        self._rechnung_vergessen()
-        self._zeigen()
-        for probe in list(self.bloecke):
-            self._block_auffrischen(probe)
-        self._melden(self._quellstand(), Style.TEXT)
 
     def _quelle_zeigen(self):
-        """Beschriftet den Knopf - und den Hinweis im Einfuegefenster."""
-        self.knopf_quelle.config(text=f"Quelle: {self.quelle}")
-        if self.quelle == QUELLE_ANHANG:
-            self.quellhinweis = (
-                "Achtung: gerechnet wird gerade mit den Rohwerten aus dem "
-                "Teilprobenanhang - die eingefuegte Liste wird gelesen, "
-                "zaehlt aber erst nach dem Umschalten der Quelle.")
+        """Sagt, woher die Rohwerte kommen - oben und im Einfuegefenster."""
+        if self.quelle == QUELLE_TEXT:
+            text = (f"Rohwerte aus: eingefuegter UM "
+                    f"({len(self.eingefuegt)} Proben)")
         else:
-            self.quellhinweis = (
-                "In der Probenvorbereitung \u201eaktueller Block\u201c -> "
-                "kopieren, hier mit Strg+V einfuegen, dann "
-                "\u201eUebernehmen\u201c.")
+            text = "Rohwerte aus: LIMS"
+        self.quellanzeige.config(
+            text=text, fg=Style.ACCENT if self.quelle == QUELLE_TEXT
+            else Style.MUTED)
+        self.quellhinweis = (
+            "In der Probenvorbereitung \u201eaktueller Block\u201c -> "
+            "kopieren, hier mit Strg+V einfuegen, dann \u201eUebernehmen\u201c "
+            "- danach wird mit dieser Liste gerechnet. \u201eLeeren\u201c "
+            "schaltet zurueck auf die Rohwerte aus dem LIMS.")
         fenster = getattr(self, "einfuegefenster", None)
         if fenster is not None and fenster.winfo_exists():
             fenster.hinweis.config(text=self.quellhinweis)
@@ -1811,15 +1829,11 @@ class TrdfSeite(tk.Frame):
         return self.rohwert_ohne_hand(probe, kuerzel)
 
     def aus_der_quelle(self, probe: str, kuerzel: str):
-        """Der Rohwert aus der gewaehlten Quelle - None, wo keiner steht.
+        """Der Rohwert aus der eingefuegten UM - None, wo keiner steht.
 
-        Die eine Quelle ist die eingefuegte Liste, die andere der
-        Teilprobenanhang. Beide koennen luecken haben; wo eine Luecke
-        ist, tritt die Ergebniszeile ein.
+        Ohne eingefuegte UM gibt es keinen, und es gilt das LIMS; mit
+        ihr kann sie Luecken haben, und dort tritt das LIMS ein.
         """
-        if self.quelle == QUELLE_ANHANG:
-            zeile = self.anhang.get((probe, kuerzel))
-            return None if zeile is None else zeile.get("mw")
         return self.eingefuegt.get(probe, {}).get(kuerzel)
 
     def rohwert_ohne_hand(self, probe: str, kuerzel: str) -> str:
@@ -2949,7 +2963,7 @@ class Einfuegefenster(tk.Toplevel):
         super().__init__(seite)
         self.seite = seite
         serie = seite.v_serie.get().strip()
-        self.title("Untersuchungsmethode einfuegen"
+        self.title("UM einfuegen"
                    + (f" - Serie {serie}" if serie else ""))
         self.configure(bg=Style.BG)
         self.geometry("1200x720")
@@ -3110,9 +3124,9 @@ class Exportvorschau(tk.Toplevel):
     def __init__(self, eltern, aenderungen, serie: str, wenn_ja,
                  zurueck=False, nur_anhang=False):
         super().__init__(eltern)
-        self.title(("Sicherung zurueckspielen - " if zurueck
+        self.title(("Load backup - " if zurueck
                     else "Teilprobenanhang angleichen - Serie " if nur_anhang
-                    else "In das LIMS schreiben - Serie ") + serie)
+                    else "Export in das LIMS - Serie ") + serie)
         self.configure(bg=Style.BG)
         self.geometry("1180x580")
         self.aenderungen = list(aenderungen)
