@@ -1,0 +1,14 @@
+# TRDF-Pruefmodul - Abhaengigkeiten
+# =================================
+# Die Oberflaeche (tkinter) ist Teil der Python-Standardbibliothek und bei der
+# offiziellen Windows-Python-Installation enthalten.
+#
+# python-oracledb (PyPI-Name: oracledb) spricht das Oracle-Protokoll direkt.
+# Nicht auf 4.x anheben: Version 4.0 hat die Unterstuetzung fuer
+# Oracle-Client-Bibliotheken aelter als 19c entfernt, damit liesse sich der
+# Client unter C:\Oracle\11.2.0 nicht mehr laden und der Thick-Mode-Fallback
+# waere wirkungslos.
+oracledb>=3.4,<4.0
+
+# Nur zum BAUEN der Windows-.exe:
+pyinstaller==6.11.1

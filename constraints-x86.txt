@@ -1,0 +1,3 @@
+# Nur für den 32-bit-Build: ab cryptography 49 gibt es keine win32-Wheels mehr,
+# ein Bau aus dem Quelltext würde eine Rust-Toolchain erfordern.
+cryptography<49

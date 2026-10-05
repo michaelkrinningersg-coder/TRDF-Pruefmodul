@@ -1,0 +1,179 @@
+name: TRDF-Pruefmodul EXE bauen
+
+# Aufbau wie "LabControl EXE bauen" im Repository TestLims:
+#   * Gebaut wird x86, also 32-bit. Der Thick-Mode-Fallback braucht denselben
+#     Bitness-Stand wie der Oracle-Client unter C:\Oracle\11.2.0 - und der ist
+#     32-bit. Eine x64-exe koennte diese Datenbank gar nicht erreichen.
+#   * Vor dem Bauen laufen alle Pruefungen (pruefungen_laufen.py), nach dem
+#     Bauen ein Selbsttest an der fertigen exe - er prueft auch, dass die
+#     mitgepackte tnsnames.ora gelesen wird und LIMS fuehrt.
+#
+# Gebaut wird bei jedem Push, der Programmcode, Abhaengigkeiten, die
+# tnsnames.ora oder diesen Ablauf aendert, dazu bei einem Kennzeichen v*
+# und ueber den Knopf "Run workflow" im Reiter Actions. Ein Kennzeichen v*
+# oder ein Zweig unter stand/ bekommt zusaetzlich ein Release.
+
+on:
+  push:
+    # Ohne "branches" liefe ein Push auf einen Zweig gar nicht an, sobald
+    # "tags" dasteht - GitHub nimmt dann nur noch Kennzeichen.
+    branches: ["**"]
+    tags: ["v*"]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "constraints-x86.txt"
+      - "tnsnames.ora"
+      - "Icon.*"
+      - ".github/workflows/build-exe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Nur 32-bit: siehe den Kopf dieser Datei.
+        arch: [x86]
+
+    steps:
+      - name: Code herunterladen
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: ${{ matrix.arch }}
+
+      - name: Bitness pruefen
+        run: |
+          $bits = python -c "import struct; print(8*struct.calcsize('P'))"
+          Write-Host "Python laeuft als $bits-bit (erwartet: ${{ matrix.arch }})"
+          $erwartet = if ("${{ matrix.arch }}" -eq "x86") { "32" } else { "64" }
+          if ($bits -ne $erwartet) { throw "Falsche Bitness: $bits statt $erwartet" }
+
+      - name: Abhaengigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          $constraints = if ("${{ matrix.arch }}" -eq "x86") { @("-c", "constraints-x86.txt") } else { @() }
+          python -m pip install -r requirements.txt @constraints
+          python -m pip list
+
+      # Jede Datei, die test_*.py heisst, mit einer Frist je Datei - ohne
+      # Datenbank, die Fenster unsichtbar.
+      - name: Alle Pruefungen
+        run: python pruefungen_laufen.py
+
+      - name: Vorherige Build-Artefakte entfernen
+        run: |
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+
+      - name: EXE mit PyInstaller bauen
+        # --onefile:  eine einzelne portable .exe
+        # --windowed: kein Konsolenfenster
+        # --icon:     Symbol der exe selbst; Icon.png liegt zusaetzlich im
+        #             Paket, weil Tk das Fenstersymbol daraus setzt.
+        # tnsnames.ora wird mitgepackt; eine Datei neben der exe geht vor.
+        # cryptography wird von python-oracledb erst zur Laufzeit importiert,
+        # deshalb findet PyInstaller es nicht von allein.
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name "TRDF-Pruefmodul-${{ matrix.arch }}"
+          --icon=Icon.ico
+          --add-data "Icon.png;."
+          --add-data "Icon.ico;."
+          --add-data "tnsnames.ora;."
+          --collect-all cryptography
+          --hidden-import tkinter
+          --hidden-import tkinter.ttk
+          --exclude-module matplotlib
+          --exclude-module pytest
+          trdfpruefmodul.py
+
+      # Ohne Konsole faellt ein unvollstaendiges Paket erst beim Anwender auf.
+      # Der Selbsttest prueft cryptography, tkinter, die tnsnames.ora und den
+      # Thin-Mode-Stack und legt sein Ergebnis als Datei ab, weil bei
+      # --windowed kein stdout da ist.
+      - name: Selbsttest der fertigen exe
+        run: |
+          $exe = "dist\TRDF-Pruefmodul-${{ matrix.arch }}.exe"
+          # Start-Process -Wait statt "& $exe": auf eine GUI-Anwendung wartet der
+          # Aufrufoperator nicht und setzt $LASTEXITCODE nicht.
+          $proc = Start-Process -FilePath $exe -ArgumentList "--selbsttest" `
+            -Wait -PassThru -RedirectStandardOutput selbsttest-ausgabe.log
+          $code = $proc.ExitCode
+          foreach ($pfad in @("selbsttest-ausgabe.log", "dist\selbsttest.log",
+                              "selbsttest.log")) {
+            if (Test-Path $pfad) { Write-Host "--- $pfad ---"; Get-Content $pfad }
+          }
+          if ($code -ne 0) { throw "Selbsttest fehlgeschlagen (Exit $code)" }
+          Write-Host "Selbsttest bestanden (Exit 0)"
+
+      # Faengt Fehler ab, die erst beim Zeichnen der Oberflaeche auftreten -
+      # etwa fehlende Tk-Bestandteile im Paket.
+      - name: Startet die Oberflaeche wirklich?
+        run: |
+          $exe = "dist\TRDF-Pruefmodul-${{ matrix.arch }}.exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+            throw "Die Anwendung hat sich nach dem Start sofort beendet (Exit $($proc.ExitCode))"
+          }
+          Write-Host "Oberflaeche laeuft nach 8 Sekunden noch - ok"
+          Stop-Process -Id $proc.Id -Force
+
+      # Der Artefaktname traegt den Zweig oder das Kennzeichen mit, damit
+      # klar ist, welche exe man herunterlaedt. Schraegstriche darf ein
+      # Artefaktname nicht enthalten.
+      - name: Kennung des Stands bilden
+        run: |
+          $ref = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'
+          "STAND=$ref" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Fertige EXE als Download bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: TRDF-Pruefmodul-${{ matrix.arch }}-${{ env.STAND }}
+          path: dist/TRDF-Pruefmodul-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 90
+
+  # Ein Release entsteht ueber ein Kennzeichen v* oder einen Zweig unter
+  # stand/ - gh legt das Kennzeichen dabei selbst an.
+  release:
+    name: Release veroeffentlichen
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      || startsWith(github.ref, 'refs/heads/stand/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefakte
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME#stand/}"
+          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1
+          then
+            gh release upload "$TAG" artefakte/*/*.exe \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "$TAG" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "TRDF-Pruefmodul $TAG" \
+              --notes "x86 = 32-bit - noetig fuer den Thick Mode mit dem Oracle-Client unter C:\\Oracle\\11.2.0." \
+              artefakte/*/*.exe
+          fi

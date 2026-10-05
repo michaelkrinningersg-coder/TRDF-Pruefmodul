@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.venv/
+.pytest_cache/
+selbsttest.log
+selbsttest-ausgabe.log
+einstellungen/
+protokoll/
+trdf_backup/
+TRDF-Pruefung/
