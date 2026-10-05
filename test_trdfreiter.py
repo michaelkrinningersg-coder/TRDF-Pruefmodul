@@ -1823,6 +1823,166 @@ def test_ohne_gewaehlte_methode_wird_nicht_abgerufen() -> None:
     mit_fenster(pruefen)
 
 
+# ------------------------------------------- Aufgeraeumte Oberflaeche
+
+def test_die_liste_der_probenvorbereitung_ist_eine_option() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        assert not blatt.einfuegen_offen()
+        assert blatt.knopf_einfuegen._text == trdfreiter.EINFUEGEN_EIN_TEXT
+        blatt._einfuegen_umschalten()
+        assert blatt.einfuegen_offen()
+        assert blatt.knopf_einfuegen._text == trdfreiter.EINFUEGEN_AUS_TEXT
+        # Zugeklappt bleibt die Liste liegen.
+        blatt.textfeld.insert("1.0", "etwas")
+        blatt._einfuegen_umschalten()
+        assert not blatt.einfuegen_offen()
+        assert blatt.textfeld.get("1.0", "end").strip() == "etwas"
+        # Die Statuszeile steht trotzdem da.
+        assert blatt.stand.winfo_manager() == "pack"
+    mit_fenster(pruefen)
+
+
+def sichtbare_texte(widget) -> list:
+    """Die Texte aller gepackten oder gesetzten Labels unter einem Widget."""
+    gefunden = []
+    for kind in widget.winfo_children():
+        if not kind.winfo_manager():
+            continue
+        if isinstance(kind, tk.Label):
+            gefunden.append(str(kind.cget("text")))
+        gefunden.extend(sichtbare_texte(kind))
+    return gefunden
+
+
+def test_die_erklaertexte_stehen_hinter_dem_i() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        texte = " ".join(sichtbare_texte(blatt))
+        assert "Die Rechnung des LIMS nachrechnen und pruefen" in texte
+        for satz in ("Das LIMS bildet aus den Rohwerten",
+                     "Was aus der gewaehlten Quelle kommt",
+                     "Je Groesse zwei Spalten",
+                     "Die bodenphysikalischen Werte",
+                     "Der letzte Schreibweg"):
+            assert satz not in texte, satz
+        for info, satz in ((blatt.info_kopf, "Das LIMS bildet"),
+                           (blatt.info_roh, "gewaehlten Quelle"),
+                           (blatt.info_ergebnis, "zwei Spalten"),
+                           (blatt.info_pruefung, "bodenphysikalischen"),
+                           (blatt.info_bericht, "letzte Schreibweg")):
+            assert satz in info.text.replace("\n", " "), satz
+            assert info.cget("text") == "i"
+        # Und das i im Pruefblatt sagt, welche Spalte welcher Parameter ist.
+        assert "U-Methode TRDF3.2" in blatt.info_pruefung.text
+    mit_fenster(pruefen)
+
+
+# ------------------------------- Berechnete Groessen ueber den Rohwerten
+
+def test_die_berechneten_groessen_sind_zu_beginn_zugeklappt() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        assert not blatt.berechnete_offen()
+        assert blatt.ergebnistabellen == [blatt.ergebnistabelle]
+        assert len(blatt.rohteilung.panes()) == 1
+        assert blatt.knopf_berechnete._text == trdfreiter.BERECHNETE_EIN_TEXT
+    mit_fenster(pruefen)
+
+
+def test_aufgeklappt_stehen_sie_ueber_den_rohwerten() -> None:
+    def pruefen(fenster):
+        blatt = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                     lambda *a, **k: None,
+                                     ordner=tempfile.mkdtemp(prefix="oben-"))
+        blatt.v_serie.set("2026B051")
+        blatt._uebernehmen(geholt())
+        blatt._berechnete_umschalten()
+        assert blatt.berechnete_offen()
+        # Oben die berechneten, unten die Rohwerte - zwei Tabellen.
+        assert len(blatt.rohteilung.panes()) == 2
+        assert str(blatt.rohteilung.panes()[0]) == str(blatt.berechnet_rahmen)
+        assert blatt.berechnet_oben is not blatt.rohtabelle
+        assert blatt.berechnet_oben.zeilen() == \
+            blatt.ergebnistabelle.zeilen()
+        assert blatt.berechnet_oben.spalten() == \
+            blatt.ergebnistabelle.spalten()
+        # Der Zustand bleibt fuer den naechsten Start.
+        assert blatt._einstellungen().get("trdf_berechnete") == \
+            trdfreiter.BERECHNETE_AN
+        blatt._berechnete_umschalten()
+        assert not blatt.berechnete_offen()
+        assert len(blatt.rohteilung.panes()) == 1
+        assert blatt._einstellungen().get("trdf_berechnete") == \
+            trdfreiter.BERECHNETE_AUS
+    mit_fenster(pruefen)
+
+
+def test_eine_aenderung_markiert_dieselbe_probe_oben() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        blatt._berechnete_umschalten(merken=False)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        # Unten die Zelle und die Probe, oben dieselbe Probe.
+        assert blatt.rohtabelle.marke("26B0011", "TRDFgesch") == "geaendert"
+        assert blatt.rohtabelle.marke("26B0011", "Probe") == "geaendert"
+        for tabelle in (blatt.berechnet_oben, blatt.ergebnistabelle):
+            assert tabelle.marke("26B0011", "Probe") == "geaendert"
+            assert tabelle.marke("26B0005", "Probe") != "geaendert"
+            # Und was sich bewegt hat, steht rot.
+            assert tabelle.marke("26B0011", "TRD_TRDF ber.") == "geaendert"
+            assert "26B0011" in tabelle.gewaehlt()
+        assert blatt.pruefungstabelle.marke("26B0011", "Probe-Nr.") == \
+            "geaendert"
+        assert blatt.arbeitszeile == "26B0011"
+    mit_fenster(pruefen)
+
+
+def test_die_arbeitszeile_wird_ueberall_unterlegt() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        blatt._berechnete_umschalten(merken=False)
+        blatt._arbeitszeile_setzen("26B0033")
+        for tabelle in (blatt.rohtabelle, blatt.berechnet_oben,
+                        blatt.ergebnistabelle, blatt.pruefungstabelle):
+            assert tabelle.gewaehlt() == ["26B0033"]
+        # Ein offener Block bleibt daneben unterlegt.
+        blatt._block_zeigen("26B0005", "Probe")
+        assert set(blatt.berechnet_oben.gewaehlt()) == {"26B0005", "26B0033"}
+    mit_fenster(pruefen)
+
+
+def test_eine_neue_serie_vergisst_die_arbeitszeile() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        blatt._arbeitszeile_setzen("26B0033")
+        blatt._uebernehmen(geholt())
+        assert blatt.arbeitszeile is None
+    mit_fenster(pruefen)
+
+
+def test_sehen_rollt_ohne_die_auswahl_zu_aendern() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        tabelle = blatt.ergebnistabelle
+        tabelle.auswahl(["26B0001"])
+        assert tabelle.sehen("26B0033") is True
+        assert tabelle.gewaehlt() == ["26B0001"]
+        assert tabelle.sehen("gibt es nicht") is False
+    mit_fenster(pruefen)
+
+
+def test_die_tabellen_haben_die_groessere_schrift() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        for tabelle in (blatt.rohtabelle, blatt.ergebnistabelle,
+                        blatt.berechnet_oben, blatt.pruefungstabelle,
+                        blatt.berichtstabelle):
+            assert tabelle.schrift[1] == trdfreiter.SCHRIFT
+            assert tabelle.zeilenluft == trdfreiter.ZEILENLUFT
+    mit_fenster(pruefen)
+
+
 # --------------------------------------------------- Die Grossansicht
 
 def eingetippt(tabelle, zeile, spalte, wert):

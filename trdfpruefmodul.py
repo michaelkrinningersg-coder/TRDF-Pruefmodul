@@ -93,7 +93,7 @@ class PruefmodulAnwendung(tk.Tk):
         except tk.TclError:
             pass
         stil.configure("Treeview", background=Style.CARD, fieldbackground=Style.CARD,
-                       foreground=Style.TEXT, rowheight=22, font=Style.font(9),
+                       foreground=Style.TEXT, rowheight=28, font=Style.font(10),
                        bordercolor=Style.BORDER)
         stil.configure("Treeview.Heading", background="#e2e8f0", foreground=Style.TEXT,
                        font=Style.font(9, "bold"), relief="flat")

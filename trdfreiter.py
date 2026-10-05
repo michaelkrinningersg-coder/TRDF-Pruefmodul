@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import textwrap
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -148,6 +149,22 @@ BERICHT_LEER = "Es wurde in dieser Sitzung noch nichts geschrieben."
 
 # Was im Methodenfeld steht, solange keine Serie abgefragt ist.
 METHODE_OFFEN = "erst abfragen"
+
+# Schrift und Zeilenluft der Tabellen auf der Seite. Groesser als in
+# LabControl: hier wird getippt, und eine Zelle, die man trifft, ohne
+# hinzusehen, ist die halbe Arbeit.
+SCHRIFT = 11
+ZEILENLUFT = 3
+
+# Wie die berechneten Groessen ueber den Rohwerten stehen: eingeklappt
+# oder offen. Von Haus aus eingeklappt - dann gehoert das ganze Fenster
+# den Rohwerten.
+BERECHNETE_AN = "an"
+BERECHNETE_AUS = "aus"
+BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen einblenden"
+EINFUEGEN_EIN_TEXT = "\u25b8 Liste Probenvorbereitung einfuegen"
+EINFUEGEN_AUS_TEXT = "\u25be Liste Probenvorbereitung zuklappen"
+BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen ausblenden"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
 # Reiter. Die Haelfte davon kommt aus der groesseren Schrift, die
@@ -279,6 +296,53 @@ def zahltext(wert, stellen=STELLEN) -> str:
     return str(gerundet).replace(".", ",")
 
 
+def erklaerung(*saetze) -> str:
+    """Ein Erklaertext fuer das i - in Zeilen, die ein Hinweisfenster traegt."""
+    return "\n".join(textwrap.fill(" ".join(saetze), 72).splitlines())
+
+
+PRUEF_ERKLAERUNG = erklaerung(
+    "Die bodenphysikalischen Werte, nach Probe-Nr. "
+    "sortiert. Geprueft wird, was das Pruefmodul gerechnet "
+    "hat: der Skelettanteil gegen 0 und 100 Prozent und "
+    "gegen den geschaetzten Grobboden, der Abstand "
+    "zwischen gemessenem und geschaetztem Skelettanteil, "
+    "der Feinbodenvorrat gegen null und die "
+    "Trockenrohdichte gegen den Sollbereich ihrer "
+    "Kohlenstoffklasse. Dazu, was erst im Vergleich mit "
+    "der Serie auffaellt: ein Wiederfindungsgrad, der "
+    "nicht zum organischen Kohlenstoff passt, und "
+    "Rohwerte, die im LIMS an zwei Stellen verschieden "
+    "stehen. Was auffaellt, steht in der Bewertung.")
+
+
+class Infozeichen(tk.Label):
+    """Ein kleines "i": der Erklaertext steht dahinter und nicht im Weg.
+
+    Die Seite traegt sonst ueber jeder Tabelle einen Absatz, den man
+    einmal liest und danach nur noch ueberspringt. Hier kommt er, wenn
+    die Maus auf dem i steht - oder sofort bei einem Klick darauf.
+    """
+
+    def __init__(self, eltern, text: str, bg=None):
+        super().__init__(eltern, text="i", fg="#ffffff", bg=Style.ACCENT,
+                         font=(Style.FONT, 8, "bold italic"), width=2,
+                         cursor="question_arrow", padx=0, pady=0)
+        self._hinweis = ToolTip(self, text)
+        self.bind("<Button-1>", lambda e: self._sofort())
+
+    @property
+    def text(self) -> str:
+        return self._hinweis.text
+
+    def setzen(self, text: str):
+        self._hinweis.text = text
+
+    def _sofort(self):
+        self._hinweis.hidetip()
+        self._hinweis.showtip()
+
+
 class TrdfSeite(tk.Frame):
     """Die ganze Seite - Auswahl, Einfuegefeld und die drei Tabellen."""
 
@@ -332,6 +396,7 @@ class TrdfSeite(tk.Frame):
         self._mit_hand = {}          # gemerkte Rechnungen, mit Handwerten
         self._ohne_hand = {}         # dieselben ohne sie
         self.proben = []             # (lnr, probennummer)
+        self.arbeitszeile = None     # die Probe, in der gerade getippt wird
         self.letzter_export = None   # der Bericht des letzten Schreibwegs
 
     # ------------------------------------------------------------- Aufbau
@@ -339,23 +404,23 @@ class TrdfSeite(tk.Frame):
         kopf = tk.Frame(self, bg=Style.CARD, highlightbackground=Style.BORDER,
                         highlightthickness=1, padx=16, pady=12)
         kopf.pack(fill="x")
-        tk.Label(kopf, text="Die Rechnung des LIMS nachrechnen und pruefen",
+        titel = tk.Frame(kopf, bg=Style.CARD)
+        titel.pack(fill="x", pady=(0, 8))
+        tk.Label(titel, text="Die Rechnung des LIMS nachrechnen und pruefen",
                  bg=Style.CARD, fg=Style.TEXT, font=Style.font(11, "bold"),
-                 anchor="w").pack(fill="x")
-        tk.Label(kopf,
-                 text="Das LIMS bildet aus den Rohwerten einer TRDF-Serie "
-                      "ein Dutzend Groessen. Das Pruefmodul rechnet sie mit "
-                      "denselben Formeln noch einmal, stellt beides "
-                      "nebeneinander und prueft, ob die bodenphysikalischen "
-                      "Werte zueinander passen. Erst die Serie waehlen, dann "
-                      "\u201eAbfragen\u201c: angeboten werden alle "
-                      "Untersuchungsmethoden der Serie, deren Kuerzel TRDF "
-                      "traegt. Rohwerte lassen sich von Hand aendern - dann "
-                      "wird sofort neu gerechnet; in das LIMS geht eine "
-                      "Aenderung erst ueber \u201eIn das LIMS schreiben\u201c.",
-                 bg=Style.CARD, fg=Style.MUTED, font=Style.font(9),
-                 anchor="w", justify="left", wraplength=980).pack(
-            fill="x", pady=(2, 8))
+                 anchor="w").pack(side="left")
+        self.info_kopf = Infozeichen(titel, erklaerung(
+            "Das LIMS bildet aus den Rohwerten einer TRDF-Serie ein Dutzend "
+            "Groessen. Das Pruefmodul rechnet sie mit denselben Formeln noch "
+            "einmal, stellt beides nebeneinander und prueft, ob die "
+            "bodenphysikalischen Werte zueinander passen.",
+            "Erst die Serie waehlen, dann \u201eAbfragen\u201c: angeboten "
+            "werden alle Untersuchungsmethoden der Serie, deren Kuerzel TRDF "
+            "traegt.",
+            "Rohwerte lassen sich von Hand aendern - dann wird sofort neu "
+            "gerechnet; in das LIMS geht eine Aenderung erst ueber "
+            "\u201eIn das LIMS schreiben\u201c."))
+        self.info_kopf.pack(side="left", padx=(8, 0))
 
         wahl = tk.Frame(kopf, bg=Style.CARD)
         wahl.pack(fill="x")
@@ -421,12 +486,25 @@ class TrdfSeite(tk.Frame):
                 "Vorher zeigt eine Uebersicht Zeile fuer Zeile, was alt und\n"
                 "was neu waere; der alte Stand geht in eine Sicherung.")
 
+        # Die Statuszeile steht immer da - sie sagt, was gerade geschieht.
+        self.stand = tk.Label(kopf, text="", bg=Style.CARD, fg=Style.MUTED,
+                              font=Style.font(9), anchor="w", justify="left",
+                              wraplength=1100)
+        self.stand.pack(fill="x", pady=(8, 0))
+
+        # Die Liste aus der Probenvorbereitung ist eine Option: sie steht
+        # erst da, wenn man sie aufklappt. Wer mit den Rohwerten aus dem
+        # LIMS arbeitet, braucht das Feld nicht.
         quellzeile = tk.Frame(kopf, bg=Style.CARD)
-        quellzeile.pack(fill="x", pady=(10, 2))
-        self.quellschrift = tk.Label(
-            quellzeile, text="", bg=Style.CARD, fg=Style.MUTED,
-            font=Style.font(9), anchor="w")
-        self.quellschrift.pack(side="left")
+        quellzeile.pack(fill="x", pady=(8, 0))
+        self.knopf_einfuegen = RoundedButton(
+            quellzeile, text=EINFUEGEN_EIN_TEXT, width=360, height=26,
+            bg="#334155", command=self._einfuegen_umschalten)
+        self.knopf_einfuegen.pack(side="left")
+        ToolTip(self.knopf_einfuegen,
+                "Optional: die Liste aus der Probenvorbereitung einfuegen,\n"
+                "um zu pruefen, ob die Uebernahme in das LIMS stimmt.\n"
+                "Ohne sie wird mit den Rohwerten aus dem LIMS gerechnet.")
         self.knopf_quelle = RoundedButton(
             quellzeile, text="", width=230, height=26, bg="#334155",
             command=self._quelle_wechseln)
@@ -437,10 +515,15 @@ class TrdfSeite(tk.Frame):
                 "Probenvorbereitung und dem Teilprobenanhang des LIMS -\n"
                 "der Stelle, aus der das LIMS selbst rechnet.\n"
                 "Von Hand geaenderte Werte stechen in beiden Faellen.")
-        einfuegen = tk.Frame(kopf, bg=Style.CARD)
+        self.einfuege_rahmen = tk.Frame(kopf, bg=Style.CARD)
+        self.quellschrift = tk.Label(
+            self.einfuege_rahmen, text="", bg=Style.CARD, fg=Style.MUTED,
+            font=Style.font(9), anchor="w")
+        self.quellschrift.pack(fill="x", pady=(6, 2))
+        einfuegen = tk.Frame(self.einfuege_rahmen, bg=Style.CARD)
         einfuegen.pack(fill="x")
         self.textfeld = tk.Text(einfuegen, height=6, wrap="none",
-                                font=("Consolas", 9), bg=Style.CARD,
+                                font=("Consolas", 10), bg=Style.CARD,
                                 fg=Style.TEXT,
                                 highlightbackground=Style.BORDER,
                                 highlightthickness=1)
@@ -449,7 +532,7 @@ class TrdfSeite(tk.Frame):
                               command=self.textfeld.yview)
         leiste.pack(side="left", fill="y")
         self.textfeld.configure(yscrollcommand=leiste.set)
-        knoepfe = tk.Frame(kopf, bg=Style.CARD)
+        knoepfe = tk.Frame(self.einfuege_rahmen, bg=Style.CARD)
         knoepfe.pack(fill="x", pady=(6, 0))
         RoundedButton(knoepfe, text="Uebernehmen", width=140, height=30,
                       bg="#334155", command=self._text_uebernehmen).pack(
@@ -457,9 +540,6 @@ class TrdfSeite(tk.Frame):
         RoundedButton(knoepfe, text="Leeren", width=100, height=30,
                       bg="#6b7268", command=self._text_leeren).pack(
             side="left", padx=(8, 0))
-        self.stand = tk.Label(knoepfe, text="", bg=Style.CARD, fg=Style.MUTED,
-                              font=Style.font(9), anchor="w")
-        self.stand.pack(side="left", padx=(14, 0))
 
         self.reiter = ttk.Notebook(self)
         self.reiter.pack(fill="both", expand=True, pady=(12, 0))
@@ -468,27 +548,13 @@ class TrdfSeite(tk.Frame):
         self._pruef_reiter()
         self._bericht_reiter()
         self._quelle_zeigen()
+        if self._gemerkt("trdf_berechnete") == BERECHNETE_AN:
+            self._berechnete_umschalten(merken=False)
         self.serienliste_laden()
 
     def _rohwerte_reiter(self):
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
         self.reiter.add(seite, text=" Rohwerte ")
-        tk.Label(seite,
-                 text="Was aus der gewaehlten Quelle kommt, daneben was in "
-                      "der Ergebnistabelle des LIMS steht. "
-                      "Eine Zelle laesst sich anklicken und ueberschreiben; "
-                      "Tab geht in der Zeile weiter, die Pfeile in alle "
-                      "Richtungen, Eingabe eine Zeile tiefer. Aus Excel "
-                      "kopierte Werte lassen sich in die obere Zelle "
-                      "einfuegen - sie laufen von dort nach unten und "
-                      "nach rechts weiter und ueberschreiben, was dort "
-                      "steht. Rechts steht, "
-                      "was an den Rohwerten auffaellt: was der Variante "
-                      "fehlt, was ausserhalb seines Bereichs liegt und was "
-                      "nicht zueinander passt.",
-                 bg=Style.BG, fg=Style.MUTED, font=Style.font(9),
-                 anchor="w", justify="left", wraplength=980).pack(
-            fill="x", pady=(0, 6))
         leiste = tk.Frame(seite, bg=Style.BG)
         leiste.pack(fill="x", pady=(0, 6))
         RoundedButton(leiste, text="Rohwertblatt als CSV", width=190,
@@ -533,14 +599,66 @@ class TrdfSeite(tk.Frame):
                 "an den beiden Stellen verschieden stehen.\n"
                 "Auch dieser Weg geht ueber eine bestaetigte\n"
                 "Uebersicht und nach einer Sicherung.")
+        self.info_roh = Infozeichen(leiste, erklaerung(
+            "Was aus der gewaehlten Quelle kommt, daneben was in "
+            "der Ergebnistabelle des LIMS steht. "
+            "Eine Zelle laesst sich anklicken und ueberschreiben; "
+            "Tab geht in der Zeile weiter, die Pfeile in alle "
+            "Richtungen, Eingabe eine Zeile tiefer. Aus Excel "
+            "kopierte Werte lassen sich in die obere Zelle "
+            "einfuegen - sie laufen von dort nach unten und "
+            "nach rechts weiter und ueberschreiben, was dort "
+            "steht. Rechts steht, "
+            "was an den Rohwerten auffaellt: was der Variante "
+            "fehlt, was ausserhalb seines Bereichs liegt und was "
+            "nicht zueinander passt."))
+        self.info_roh.pack(side="left", padx=(10, 0))
         self.rohstand = tk.Label(leiste, text="", bg=Style.BG, fg=Style.MUTED,
                                  font=Style.font(9), anchor="w")
         self.rohstand.pack(side="left", padx=(14, 0))
+
+        # Oben die berechneten Groessen, unten die Rohwerte - zwei
+        # getrennte Tabellen, die Grenze dazwischen laesst sich ziehen.
+        # Oben ist von Haus aus zugeklappt: dann gehoert das Fenster
+        # den Rohwerten.
+        umschalter = tk.Frame(seite, bg=Style.BG)
+        umschalter.pack(fill="x", pady=(0, 4))
+        self.knopf_berechnete = RoundedButton(
+            umschalter, text=BERECHNETE_EIN_TEXT, width=280, height=26,
+            bg="#334155", command=self._berechnete_umschalten)
+        self.knopf_berechnete.pack(side="left")
+        ToolTip(self.knopf_berechnete,
+                "Zeigt ueber den Rohwerten die berechneten Groessen -\n"
+                "dieselbe Tabelle wie im Reiter \u201eErgebnisse\u201c. Wer\n"
+                "unten einen Rohwert aendert, sieht oben dieselbe Probe:\n"
+                "die Zeile ist unterlegt, was sich bewegt hat, steht rot.\n"
+                "Die Grenze zwischen beiden laesst sich ziehen.")
+        self.rohteilung = ttk.PanedWindow(seite, orient="vertical")
+        self.rohteilung.pack(fill="both", expand=True)
+        self.berechnet_rahmen = tk.Frame(self.rohteilung, bg=Style.BG)
+        obenkopf = tk.Frame(self.berechnet_rahmen, bg=Style.BG)
+        obenkopf.pack(fill="x", pady=(0, 2))
+        tk.Label(obenkopf, text="Berechnete Groessen", bg=Style.BG,
+                 fg=Style.TEXT, font=Style.font(9, "bold"),
+                 anchor="w").pack(side="left")
+        Infozeichen(obenkopf, erklaerung(
+            "Je Groesse zwei Spalten: gebucht im LIMS und gerechnet "
+            "(ber.). Rot: durch die Handeingabe bewegt - und die Probe, in "
+            "der von Hand geaendert wurde. Unterlegt ist die Zeile, in der "
+            "unten gerade getippt wird.")).pack(side="left", padx=(8, 0))
+        self.berechnet_oben = eingaberaster.Eingaberaster(
+            self.berechnet_rahmen, hoehe=8, bei_klick=self._block_zeigen,
+            schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
+        self.berechnet_oben.pack(fill="both", expand=True, pady=(0, 6))
+        rohrahmen = tk.Frame(self.rohteilung, bg=Style.BG)
         self.rohtabelle = eingaberaster.Eingaberaster(
-            seite, hoehe=16, bei_aenderung=self._von_hand_geaendert,
+            rohrahmen, hoehe=16, bei_aenderung=self._von_hand_geaendert,
             bei_klick=self._block_zeigen,
-            bei_block=self._block_eingefuegt)
+            bei_block=self._block_eingefuegt,
+            bei_zeile=self._arbeitszeile_setzen,
+            schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
         self.rohtabelle.pack(fill="both", expand=True)
+        self.rohteilung.add(rohrahmen, weight=3)
         # Dieselbe Tabelle kann zweimal dastehen - klein im Reiter und
         # gross im eigenen Fenster. Beide zeigen denselben Stand und
         # nehmen dieselben Eingaben an; was hier steht, wird ueberall
@@ -550,48 +668,35 @@ class TrdfSeite(tk.Frame):
     def _ergebnis_reiter(self):
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
         self.reiter.add(seite, text=" Ergebnisse ")
-        tk.Label(seite,
-                 text="Je Groesse zwei Spalten: was das LIMS gebucht hat "
-                      "und was das Pruefmodul aus denselben Formeln rechnet - "
-                      "zusammengehalten durch den Hintergrund, der von "
-                      "Groesse zu Groesse wechselt. Amber heisst, dass "
-                      "beides auseinandergeht; rechts steht, welche "
-                      "Groessen es sind. Rot heisst, dass der Wert von "
-                      "Hand bewegt wurde.",
-                 bg=Style.BG, fg=Style.MUTED, font=Style.font(9),
-                 anchor="w", justify="left", wraplength=980).pack(
-            fill="x", pady=(0, 6))
         leiste = tk.Frame(seite, bg=Style.BG)
         leiste.pack(fill="x", pady=(0, 6))
         self._infoknopf(leiste, self._ergebnislegende_zeigen)
+        self.info_ergebnis = Infozeichen(leiste, erklaerung(
+            "Je Groesse zwei Spalten: was das LIMS gebucht hat "
+            "und was das Pruefmodul aus denselben Formeln rechnet - "
+            "zusammengehalten durch den Hintergrund, der von "
+            "Groesse zu Groesse wechselt. Amber heisst, dass "
+            "beides auseinandergeht; rechts steht, welche "
+            "Groessen es sind. Rot heisst, dass der Wert von "
+            "Hand bewegt wurde."))
+        self.info_ergebnis.pack(side="left", padx=(10, 0))
         self.ergebnistabelle = eingaberaster.Eingaberaster(
-            seite, hoehe=16, bei_klick=self._block_zeigen)
+            seite, hoehe=16, bei_klick=self._block_zeigen,
+            schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
         self.ergebnistabelle.pack(fill="both", expand=True)
+        # Die berechneten Groessen koennen ein zweites Mal dastehen - ueber
+        # den Rohwerten. Beide werden mit demselben Stand gefuellt.
+        self.ergebnistabellen = [self.ergebnistabelle]
 
     def _pruef_reiter(self):
         """Das Arbeitsblatt: ein Wert je Zeile und ein Urteil dazu."""
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
         self.reiter.add(seite, text=" Pruefung ")
-        tk.Label(seite,
-                 text="Die bodenphysikalischen Werte, nach Probe-Nr. "
-                      "sortiert. Geprueft wird, was das Pruefmodul gerechnet "
-                      "hat: der Skelettanteil gegen 0 und 100 Prozent und "
-                      "gegen den geschaetzten Grobboden, der Abstand "
-                      "zwischen gemessenem und geschaetztem Skelettanteil, "
-                      "der Feinbodenvorrat gegen null und die "
-                      "Trockenrohdichte gegen den Sollbereich ihrer "
-                      "Kohlenstoffklasse. Dazu, was erst im Vergleich mit "
-                      "der Serie auffaellt: ein Wiederfindungsgrad, der "
-                      "nicht zum organischen Kohlenstoff passt, und "
-                      "Rohwerte, die im LIMS an zwei Stellen verschieden "
-                      "stehen. Was auffaellt, steht in der Bewertung.",
-                 bg=Style.BG, fg=Style.MUTED, font=Style.font(9),
-                 anchor="w", justify="left", wraplength=980).pack(
-            fill="x", pady=(0, 4))
+        # Welche Spalte welchen Parameter zeigt: steht im i, nicht ueber
+        # der Tabelle. Das Label bleibt als Traeger des Textes.
         self.legende = tk.Label(seite, text="", bg=Style.BG, fg=Style.MUTED,
                                 font=Style.font(8), anchor="w",
                                 justify="left", wraplength=980)
-        self.legende.pack(fill="x", pady=(0, 6))
 
         leiste = tk.Frame(seite, bg=Style.BG)
         leiste.pack(fill="x", pady=(0, 6))
@@ -616,45 +721,118 @@ class TrdfSeite(tk.Frame):
                       bg="#334155", command=self._bild_zeigen).pack(
             side="left", padx=(8, 0))
         self._infoknopf(leiste, self._prueflegende_zeigen)
+        self.info_pruefung = Infozeichen(leiste, PRUEF_ERKLAERUNG)
+        self.info_pruefung.pack(side="left", padx=(10, 0))
         self.pruefstand = tk.Label(leiste, text="", bg=Style.BG,
                                    fg=Style.MUTED, font=Style.font(9),
                                    anchor="w")
         self.pruefstand.pack(side="left", padx=(14, 0))
 
         self.pruefungstabelle = eingaberaster.Eingaberaster(
-            seite, hoehe=16, bei_klick=self._block_zeigen)
+            seite, hoehe=16, bei_klick=self._block_zeigen,
+            schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
         self.pruefungstabelle.pack(fill="both", expand=True)
 
     def _bericht_reiter(self):
         """Was zuletzt in das LIMS gegangen ist - eine Probe je Zeile."""
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=8, pady=8)
         self.reiter.add(seite, text=" Exportbericht ")
-        tk.Label(seite,
-                 text="Der letzte Schreibweg in das LIMS, von der anderen "
-                      "Seite gesehen: eine Probe je Zeile und eine Spalte "
-                      "je Groesse, die sich bewegt hat - erst die "
-                      "Rohwerte, dann die daraus berechneten Groessen. In "
-                      "der Zelle steht, was vorher im LIMS stand und was "
-                      "jetzt dort steht. Der Bericht bleibt stehen, bis "
-                      "wieder geschrieben wird; als Datei - mit allen "
-                      "geschriebenen Stellen - liegt er neben "
-                      "der Sicherung im Ordner "
-                      f"„{trdfexport.ORDNER}“.",
-                 bg=Style.BG, fg=Style.MUTED, font=Style.font(9),
-                 anchor="w", justify="left", wraplength=980).pack(
-            fill="x", pady=(0, 6))
         leiste = tk.Frame(seite, bg=Style.BG)
         leiste.pack(fill="x", pady=(0, 6))
         RoundedButton(leiste, text="Bericht als CSV", width=170, height=28,
                       bg="#334155", command=self._bericht_speichern).pack(
             side="left")
+        self.info_bericht = Infozeichen(leiste, erklaerung(
+            "Der letzte Schreibweg in das LIMS, von der anderen "
+            "Seite gesehen: eine Probe je Zeile und eine Spalte "
+            "je Groesse, die sich bewegt hat - erst die "
+            "Rohwerte, dann die daraus berechneten Groessen. In "
+            "der Zelle steht, was vorher im LIMS stand und was "
+            "jetzt dort steht. Der Bericht bleibt stehen, bis "
+            "wieder geschrieben wird; als Datei - mit allen "
+            "geschriebenen Stellen - liegt er neben "
+            "der Sicherung im Ordner "
+            f"„{trdfexport.ORDNER}“."))
+        self.info_bericht.pack(side="left", padx=(10, 0))
         self.berichtstand = tk.Label(leiste, text=BERICHT_LEER, bg=Style.BG,
                                      fg=Style.MUTED, font=Style.font(9),
                                      anchor="w")
         self.berichtstand.pack(side="left", padx=(14, 0))
         self.berichtstabelle = eingaberaster.Eingaberaster(
-            seite, hoehe=16, bei_klick=self._block_zeigen)
+            seite, hoehe=16, bei_klick=self._block_zeigen,
+            schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
         self.berichtstabelle.pack(fill="both", expand=True)
+
+    # ------------------------------------------------------ Einfuegeliste
+    def einfuegen_offen(self) -> bool:
+        """Ob das Feld fuer die Liste der Probenvorbereitung offen steht."""
+        return bool(self.einfuege_rahmen.winfo_manager())
+
+    def _einfuegen_umschalten(self):
+        """Das Einfuegefeld auf- oder zuklappen - die Liste bleibt liegen."""
+        if self.einfuegen_offen():
+            self.einfuege_rahmen.pack_forget()
+            self.knopf_einfuegen.config(text=EINFUEGEN_EIN_TEXT)
+        else:
+            self.einfuege_rahmen.pack(fill="x", after=self.knopf_einfuegen
+                                      .master)
+            self.knopf_einfuegen.config(text=EINFUEGEN_AUS_TEXT)
+            self.textfeld.focus_set()
+
+    # ------------------------------------- Berechnete Groessen ueber Rohwerten
+    def berechnete_offen(self) -> bool:
+        """Ob die berechneten Groessen ueber den Rohwerten stehen."""
+        return self.berechnet_oben in self.ergebnistabellen
+
+    def _berechnete_umschalten(self, merken=True):
+        """Die berechneten Groessen ueber den Rohwerten auf- oder zuklappen."""
+        if self.berechnete_offen():
+            self.ergebnistabellen.remove(self.berechnet_oben)
+            self.rohteilung.forget(self.berechnet_rahmen)
+            self.knopf_berechnete.config(text=BERECHNETE_EIN_TEXT)
+        else:
+            self.rohteilung.insert(0, self.berechnet_rahmen, weight=2)
+            self.ergebnistabellen.append(self.berechnet_oben)
+            self.knopf_berechnete.config(text=BERECHNETE_AUS_TEXT)
+            self._ergebnisse_zeigen()
+            self._auswahl_stellen()
+            self._teilung_setzen()
+        if merken:
+            konfig = self._einstellungen()
+            konfig.set("trdf_berechnete", BERECHNETE_AN
+                       if self.berechnete_offen() else BERECHNETE_AUS)
+            konfig.speichern()
+
+    def _teilung_setzen(self):
+        """Oben gut ein Drittel, unten der Rest - ziehen laesst es sich."""
+        try:
+            self.rohteilung.update_idletasks()
+            hoehe = self.rohteilung.winfo_height()
+            if hoehe > 50:
+                self.rohteilung.sashpos(0, int(hoehe * 0.38))
+        except tk.TclError:
+            pass
+
+    def _arbeitszeile_setzen(self, probe: str):
+        """In einer Rohwertzeile wird getippt - die anderen Tabellen gehen mit.
+
+        Die Zeile wird ueberall unterlegt, und die berechneten Groessen
+        und das Pruefblatt rollen zu ihr: wer unten einen Rohwert
+        aendert, sieht oben dieselbe Probe.
+        """
+        self.arbeitszeile = str(probe)
+        self._auswahl_stellen()
+        self._mitgehen()
+
+    def _mitgehen(self):
+        """Die berechneten Tabellen zur Arbeitszeile rollen."""
+        if not self.arbeitszeile:
+            return
+        for tabelle in list(self.ergebnistabellen) + [self.pruefungstabelle]:
+            try:
+                tabelle.sehen(self.arbeitszeile)
+            except tk.TclError:
+                pass
 
     def _bericht_merken(self, geaendert, serie: str, sicherung: str,
                         offen=()):
@@ -1407,6 +1585,10 @@ class TrdfSeite(tk.Frame):
                 f"Zellen belegt")
 
     # ------------------------------------------------------------ Rechnen
+    def von_hand_bewegt(self, probe: str) -> bool:
+        """Ob in dieser Probe ein Rohwert von Hand steht."""
+        return any(welche == probe for (welche, _k) in self.vonhand)
+
     def _von_hand_geaendert(self, zeile, spalte, wert):
         self.vonhand[(zeile, spalte)] = wert
         if spalte == trdfrohpruefung.VARIANTE:
@@ -1418,9 +1600,13 @@ class TrdfSeite(tk.Frame):
         for tabelle in self.rohtabellen:
             tabelle.setzen(zeile, spalte, wert)
             tabelle.marke_setzen(zeile, spalte, "geaendert")
+            tabelle.marke_setzen(zeile, "Probe", "geaendert")
         self._befund_nachtragen(zeile)
         self._zeigen(nur_ergebnisse=True)
         self._block_auffrischen(zeile)
+        self.arbeitszeile = str(zeile)
+        self._auswahl_stellen()
+        self._mitgehen()
 
     def _befund_nachtragen(self, probe: str):
         """Die Bewertung einer Zeile neu setzen, ohne die Tabelle zu bauen.
@@ -1456,6 +1642,7 @@ class TrdfSeite(tk.Frame):
             for tabelle in self.rohtabellen:
                 if tabelle.setzen(probe, kuerzel, wert):
                     tabelle.marke_setzen(probe, kuerzel, "geaendert")
+                    tabelle.marke_setzen(probe, "Probe", "geaendert")
         if neu:
             self._rohmelden(
                 f"Variante {str(eingabe).strip()}: {len(neu)} Rohwerte "
@@ -1474,6 +1661,7 @@ class TrdfSeite(tk.Frame):
             for tabelle in self.rohtabellen:
                 tabelle.setzen(zeile, spalte, wert)
                 tabelle.marke_setzen(zeile, spalte, "geaendert")
+                tabelle.marke_setzen(zeile, "Probe", "geaendert")
         self._rechnung_vergessen()
         self._zeigen(nur_ergebnisse=True)
         for probe in {zeile for zeile, _, _ in gesetzt}:
@@ -1808,6 +1996,8 @@ class TrdfSeite(tk.Frame):
             if eintrag["bewertung"]:
                 auffaellig += 1
                 marken[(probe, BEWERTUNGSSPALTE)] = "abweichung"
+            if self.von_hand_bewegt(probe):
+                marken[(probe, "Probe")] = "geaendert"
             zeilen.append((probe, werte))
         gesamt = len(zeilen)
         if self.v_nur_rohbefunde.get():
@@ -1913,18 +2103,24 @@ class TrdfSeite(tk.Frame):
                 if kuerzel in bewegte:
                     marken[(probe, f"{kuerzel} LIMS")] = "geaendert"
                     marken[(probe, f"{kuerzel} ber.")] = "geaendert"
+            # Die Zeile selbst sagt, dass in ihr gearbeitet wurde - auch
+            # wenn sich keine Groesse bewegt hat.
+            if bewegte or self.von_hand_bewegt(probe):
+                marken[(probe, "Probe")] = "geaendert"
+                marken[(probe, "Zeile")] = "geaendert"
             werte[BEWERTUNGSSPALTE] = (
                 AUSEINANDER.format(", ".join(auseinander))
                 if auseinander else "")
             if auseinander:
                 marken[(probe, BEWERTUNGSSPALTE)] = "abweichung"
             zeilen.append((probe, werte))
-        self.ergebnistabelle.zellhinweise(self.aufschlusshinweis)
-        self.ergebnistabelle.fuellen(
-            spalten, zeilen, marken=marken,
-            breiten={"Zeile": 56, "Probe": 110, BEWERTUNGSSPALTE: 420},
-            fest=fest, ueberschriften=koepfe)
-        self._kopfhinweise(self.ergebnistabelle, spalten)
+        for tabelle in self.ergebnistabellen:
+            tabelle.zellhinweise(self.aufschlusshinweis)
+            tabelle.fuellen(
+                spalten, zeilen, marken=marken,
+                breiten={"Zeile": 56, "Probe": 110, BEWERTUNGSSPALTE: 420},
+                fest=fest, ueberschriften=koepfe)
+            self._kopfhinweise(tabelle, spalten)
         if self.proben:
             gesamt = len(self.proben) * len(gerechnet)
             self._melden(
@@ -1972,6 +2168,8 @@ class TrdfSeite(tk.Frame):
             if probe["bewertung"]:
                 auffaellig += 1
                 marken[(probe["probe"], "Bewertung")] = "abweichung"
+            if bewegte or self.von_hand_bewegt(probe["probe"]):
+                marken[(probe["probe"], "Probe-Nr.")] = "geaendert"
             zeilen.append((probe["probe"], werte))
         gesamt = len(zeilen)
         if self.v_nur_befunde.get():
@@ -2040,6 +2238,9 @@ class TrdfSeite(tk.Frame):
                     f"{lims_db.ATNULL_MARKE}, CO3 aus "
                     f"{lims_db.ATNULL_CO3_MARKE}")
         self.legende.config(text=methoden + "\n" + "  ·  ".join(teile))
+        self.info_pruefung.setzen(
+            PRUEF_ERKLAERUNG + "\n\n" + methoden + "\n"
+            + "\n".join(teile))
 
     # ------------------------------------------------------------- Der Block
     # Ein Klick auf die Probennummer - in welcher der drei Tabellen auch
@@ -2144,8 +2345,12 @@ class TrdfSeite(tk.Frame):
         """
         offen = [probe for probe, fenster in self.bloecke.items()
                  if fenster is not None and fenster.winfo_exists()]
-        for tabelle in list(self.rohtabellen) + [
-                getattr(self, "ergebnistabelle", None),
+        # Dazu die Zeile, in der gerade getippt wird - sie ist der Ort,
+        # an dem gearbeitet wird, auch ohne offenen Block.
+        if self.arbeitszeile and self.arbeitszeile not in offen:
+            offen.append(self.arbeitszeile)
+        for tabelle in list(self.rohtabellen) + list(
+                getattr(self, "ergebnistabellen", [])) + [
                 getattr(self, "pruefungstabelle", None)]:
             if tabelle is None:
                 continue
@@ -2607,7 +2812,8 @@ class Grossansicht(tk.Toplevel):
             zeilenluft=GROSS_LUFT,
             bei_aenderung=seite._von_hand_geaendert,
             bei_klick=self._angeklickt,
-            bei_block=seite._block_eingefuegt)
+            bei_block=seite._block_eingefuegt,
+            bei_zeile=seite._arbeitszeile_setzen)
         self.tabelle.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         seite.rohansicht_anmelden(self.tabelle)
         # Erst wenn das Fenster seine Masse hat, weiss die Tabelle, wo

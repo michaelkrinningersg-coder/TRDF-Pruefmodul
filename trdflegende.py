@@ -572,7 +572,8 @@ class Legendenfenster(tk.Toplevel):
 
         self.tabelle = eingaberaster.Eingaberaster(
             self, hoehe=18, bei_klick=self._geklickt,
-            bei_verschieben=self._verschieben)
+            bei_verschieben=self._verschieben, schriftgroesse=11,
+            zeilenluft=3)
         self.tabelle.pack(fill="both", expand=True, padx=16, pady=(0, 14))
         self._zeigen()
 

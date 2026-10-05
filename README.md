@@ -19,7 +19,7 @@ Server und ohne Internet**.
 | Rohwerte von Hand ändern (auch Einfügen aus Excel, Großansicht) | Plotvergleich |
 | **Blockbild** beim Klick auf die Probe | |
 | **LIMS-Export**: *In das LIMS schreiben*, *Sicherung zurueckspielen*, *Anhang angleichen* | |
-| Einfügefeld für die Liste der Probenvorbereitung, Quelle umschalten | |
+| Einfügefeld für die Liste der Probenvorbereitung – als Option, erst nach Klick sichtbar; Quelle umschalten | |
 | Info/Legende je Tabelle, CSV-Blätter, Streubild TRDF über Kohlenstoff | |
 
 ## Ablauf
@@ -35,8 +35,19 @@ Server und ohne Internet**.
    * mehrere → im Feld *Untersuchungsmethode* wählen; die Wahl holt die
      Serie. Tragen zwei dasselbe Kürzel (Boden/Humus), steht die UM_ID dabei.
 4. **Prüfen und ändern** – Rohwerte überschreiben, es wird sofort neu
-   gerechnet. Ein Klick auf die Probennummer öffnet den **Bodenblock**;
-   mit Pfeil rauf/runter blättert er durch die Serie.
+   gerechnet. Ein Klick auf die Probennummer öffnet den **Bodenblock** als
+   eigenes Fenster, das jede Änderung live mitzeichnet; mit Pfeil
+   rauf/runter blättert er durch die Serie.
+
+   Über den Rohwerten lassen sich mit **„▸ Berechnete Groessen
+   einblenden“** die berechneten Größen aufklappen – eine eigene Tabelle,
+   die Grenze zu den Rohwerten lässt sich ziehen, zugeklappt gehört das
+   Fenster ganz den Rohwerten. Wer unten in einer Probenzeile tippt, sieht
+   oben dieselbe Probe unterlegt und in den Blick gerollt; die Probe, in der
+   von Hand geändert wurde, und jede dadurch bewegte Größe stehen rot.
+
+   Die Erklärtexte stehen hinter den kleinen **i** neben Überschrift und
+   Knopfleisten (Maus darauf oder Klick).
 5. **In das LIMS schreiben** – eine Übersicht zeigt Zeile für Zeile alt und
    neu; erst nach Bestätigung wird der alte Stand in `trdf_backup` gesichert
    und dann geschrieben (Ergebniszeile und Teilprobenanhang in einer

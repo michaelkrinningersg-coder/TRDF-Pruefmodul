@@ -233,7 +233,7 @@ class Eingaberaster(tk.Frame):
     def __init__(self, eltern, hoehe=14, bei_aenderung=None, bei_klick=None,
                  bei_block=None, schriftgroesse=9, zeilenluft=0,
                  bei_verschieben=None, bei_rechtsklick=None,
-                 bei_doppelklick=None, bei_kopfklick=None):
+                 bei_doppelklick=None, bei_kopfklick=None, bei_zeile=None):
         super().__init__(eltern, bg=Style.CARD,
                          highlightbackground=Style.BORDER,
                          highlightthickness=1)
@@ -263,6 +263,10 @@ class Eingaberaster(tk.Frame):
         # Tabelle nicht. Ohne Angabe tut der Klick, was er bisher tat:
         # den Hinweis wegnehmen.
         self.bei_kopfklick = bei_kopfklick
+        # Die Zeile, in der gerade eine Zelle geoeffnet wurde. Damit
+        # kann eine zweite Tabelle mitgehen - etwa die berechneten
+        # Groessen ueber den Rohwerten, die dieselbe Probe zeigen.
+        self.bei_zeile = bei_zeile
         self.schrift = ("Consolas", schriftgroesse)
         # Luft ueber und unter der Zeile. Eine hohe Zeile liest sich in
         # einer breiten Tabelle leichter, ohne dass die Schrift so gross
@@ -1432,6 +1436,23 @@ class Eingaberaster(tk.Frame):
         self.text.xview("moveto", waagerecht)
         return True
 
+    def sehen(self, zeile) -> bool:
+        """Eine Zeile in den Blick holen - ohne an der Auswahl zu ruehren.
+
+        Anders als `zeigen` bleibt die Unterlegung, wie sie ist: wer in
+        einer anderen Tabelle arbeitet, gibt hier nur den Blick vor.
+        Waagerecht bleibt alles stehen.
+        """
+        kennung = str(zeile)
+        if kennung not in self._reihen:
+            return False
+        nummer = self._reihen.index(kennung) + 1
+        waagerecht = self.text.xview()[0]
+        for feld in self._felder():
+            feld.see(f"{nummer}.0")
+        self.text.xview("moveto", waagerecht)
+        return True
+
     def _auswahl_zeigen(self):
         """Die Unterlegung setzen - in beiden Haelften zugleich."""
         for feld in self._felder():
@@ -1640,6 +1661,8 @@ class Eingaberaster(tk.Frame):
         self._aktiv.focus_set()
         self._aktiv.select_range(0, "end")
         self._aktiv.icursor("end")
+        if self.bei_zeile is not None:
+            self.bei_zeile(zeile)
 
     def schliessen(self):
         self._offen = None

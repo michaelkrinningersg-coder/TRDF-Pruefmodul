@@ -100,6 +100,18 @@ class ToolTip:
         lbl = tk.Label(tw, text=self.text, justify=tk.LEFT, background="#ffffe0",
                        relief=tk.SOLID, borderwidth=1, font=("Arial", 9))
         lbl.pack(ipadx=3, ipady=3)
+        # Am rechten oder unteren Bildschirmrand nach innen ruecken - ein
+        # Hinweis, der halb aus dem Bild ragt, ist halb gelesen.
+        try:
+            tw.update_idletasks()
+            breite, hoehe = tw.winfo_reqwidth(), tw.winfo_reqheight()
+            rand_x = self.widget.winfo_screenwidth() - breite - 4
+            rand_y = self.widget.winfo_screenheight() - hoehe - 4
+            if x > rand_x or y > rand_y:
+                tw.wm_geometry(f"+{max(0, min(x, rand_x))}+"
+                               f"{max(0, min(y, rand_y))}")
+        except tk.TclError:
+            pass
 
     def hidetip(self):
         if self.tipwindow:
