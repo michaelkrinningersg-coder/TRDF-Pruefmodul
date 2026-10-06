@@ -3414,6 +3414,66 @@ def test_die_rohtabelle_rundet_auch_die_eingefuegte_um():
     mit_fenster(pruefen)
 
 
+# ------------------------------------------------------- Geschwindigkeit
+
+def test_eine_handeingabe_rechnet_nur_ihre_probe_neu():
+    """Die anderen Proben behalten ihre Rechnung - und sie stimmt."""
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        for _lnr, probe in blatt.proben:
+            blatt.gerechnet(probe)
+        andere = blatt._mit_hand["26B0005"]
+        blatt._von_hand_geaendert("26B0011", "DichteGB", "2,9")
+        # Dieselbe gemerkte Rechnung, nicht eine neue.
+        assert blatt._mit_hand["26B0005"] is andere
+        # Ohne Handwert in der Probe ist nichts bewegt - und die
+        # Rechnung ohne Handwerte lief fuer sie gar nicht erst.
+        assert blatt.bewegt("26B0005") == set()
+        assert "26B0005" not in blatt._ohne_hand
+        # Und jede gemerkte Rechnung ist, was frisch herauskaeme.
+        for _lnr, probe in blatt.proben:
+            assert blatt.gerechnet(probe) == blatt._rechnen(probe), probe
+            assert blatt.gerechnet_ohne_hand(probe) == blatt._rechnen(
+                probe, mit_hand=False), probe
+    mit_fenster(pruefen)
+
+
+def test_die_zerlegte_formel_wird_gemerkt_und_rechnet_gleich():
+    import trdfformel
+    formel = 'if (isnum($a) == 1) {$b=$a*2;} else {$b="x";}'
+    eins = trdfformel.rechnen(formel, {"a": D(3)}, "b")
+    zwei = trdfformel.rechnen(formel, {"a": D(4)}, "b")
+    assert (eins, zwei) == (D(6), D(8)), (eins, zwei)
+    assert trdfformel._zerlegt(formel) is trdfformel._zerlegt(formel)
+
+
+def test_verdeckte_reiter_werden_erst_beim_oeffnen_gefuellt():
+    def pruefen(fenster):
+        fenster.deiconify()
+        fenster.geometry("1200x700")
+        blatt = seite(fenster, zeilen=(5, 11))
+        blatt.pack(fill="both", expand=True)
+        blatt.reiter.select(0)
+        fenster.update()
+        assert blatt.winfo_viewable()
+        vorher = blatt.pruefungstabelle.marke("26B0011", "Probe-Nr.")
+        assert vorher != "geaendert"
+        blatt._von_hand_geaendert("26B0011", "DichteGB", "2,9")
+        # Der Reiter Pruefung ist zu: er wartet.
+        assert blatt.pruefungstabelle in blatt._ausstehend
+        assert blatt.ergebnistabelle in blatt._ausstehend
+        blatt.reiter.select(2)
+        fenster.update()
+        assert blatt.pruefungstabelle not in blatt._ausstehend
+        assert blatt.pruefungstabelle.marke("26B0011",
+                                            "Probe-Nr.") == "geaendert"
+        # Das Ergebnisblatt liest die Tabelle - es zieht vorher nach.
+        kopf, zeilen = blatt.ergebnisblatt()
+        assert not blatt._ausstehend
+        assert len(zeilen) == 2
+    mit_fenster(pruefen)
+
+
 def main() -> int:
     pruefungen = [(name, wert) for name, wert in sorted(globals().items())
                   if name.startswith("test_") and callable(wert)]

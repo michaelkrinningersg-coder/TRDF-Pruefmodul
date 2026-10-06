@@ -43,6 +43,7 @@ entscheidend.
 """
 
 import decimal
+import functools
 import re
 
 D = decimal.Decimal
@@ -58,6 +59,18 @@ _ZEICHEN = re.compile(r"""
   | (?P<leer>\s+)
 """, re.X)
 _INTO = re.compile(r"into\s+:(\w+)", re.I)
+
+
+@functools.lru_cache(maxsize=256)
+def _zerlegt(quelle) -> tuple:
+    """Die Zeichen einer Formel - einmal je Formeltext.
+
+    Eine Serie hat ein Dutzend Formeln, gerechnet wird aber je Probe und
+    je Aenderung: bei dreihundert Proben zerlegte jede Handeingabe
+    sonst dieselben zwoelf Texte siebentausendmal. Der Auswerter liest
+    die Zeichen nur, deshalb darf er sich ein gemerktes Tupel teilen.
+    """
+    return tuple(zerlegen(quelle))
 
 
 def zerlegen(quelle):
@@ -273,7 +286,9 @@ def rechnen(formel, werte, ziel, abfragen=None):
     """Fuehrt eine Formel aus und gibt den Wert des Zielkuerzels."""
     umgebung = dict(werte)
     try:
-        auswerter = Auswerter(zerlegen(formel), umgebung, abfragen)
+        marken = (_zerlegt(formel) if isinstance(formel, str)
+                  else zerlegen(formel))
+        auswerter = Auswerter(marken, umgebung, abfragen)
         while auswerter.schau()[1] is not None:
             auswerter.anweisung()
     except Exception as fehler:                      # noqa: BLE001

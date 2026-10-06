@@ -512,6 +512,7 @@ class TrdfSeite(tk.Frame):
         self.wiederholungen = {}     # probe -> (Probennummer, UM, ME)
         self.arbeitszeile = None     # die Probe, in der gerade getippt wird
         self.letzter_export = None   # der Bericht des letzten Schreibwegs
+        self._ausstehend = {}        # verdeckte Tabelle -> wie sie zu fuellen ist
 
     # ------------------------------------------------------------- Aufbau
     def _aufbauen(self):
@@ -659,6 +660,8 @@ class TrdfSeite(tk.Frame):
 
         self.reiter = ttk.Notebook(self)
         self.reiter.pack(fill="both", expand=True, pady=(6, 0))
+        self.reiter.bind("<<NotebookTabChanged>>",
+                         lambda _e: self._nachziehen(), add="+")
         self._rohwerte_reiter()
         self._ergebnis_reiter()
         self._pruef_reiter()
@@ -953,6 +956,49 @@ class TrdfSeite(tk.Frame):
         self.arbeitszeile = str(probe)
         self._auswahl_stellen()
         self._mitgehen()
+
+    # ------------------------------------------- Verdeckte Tabellen spaeter
+    # Wer in den Rohwerten tippt, sieht die Reiter Ergebnisse und
+    # Pruefung nicht. Sie bei jeder Eingabe neu zu fuellen kostete bei
+    # dreihundert Proben den groessten Teil der Wartezeit; gefuellt wird
+    # deshalb, was zu sehen ist, und der Rest, sobald sein Reiter
+    # aufgeht. Gerechnet und gezaehlt wird trotzdem sofort - die
+    # Statuszeile stimmt immer.
+
+    def _im_blick(self, tabelle) -> bool:
+        """Ob diese Tabelle gerade zu sehen ist.
+
+        Steht die Seite selbst nicht auf dem Schirm (im Bauplan, beim
+        Aufbau), gilt jede als sichtbar: dann wird wie bisher sofort
+        gefuellt.
+        """
+        try:
+            if not self.winfo_viewable():
+                return True
+            gewaehlt = str(self.reiter.select() or "")
+        except tk.TclError:
+            return True
+        return not gewaehlt or str(tabelle).startswith(gewaehlt + ".")
+
+    def _fuellen(self, tabelle, auftrag):
+        """Fuellt eine Tabelle jetzt - oder, wenn sie verdeckt ist, spaeter."""
+        if self._im_blick(tabelle):
+            self._ausstehend.pop(tabelle, None)
+            auftrag()
+        else:
+            self._ausstehend[tabelle] = auftrag
+
+    def _nachziehen(self, alle=False):
+        """Fuellt, was liegen geblieben ist und jetzt zu sehen ist."""
+        nachgezogen = False
+        for tabelle, auftrag in list(self._ausstehend.items()):
+            if alle or self._im_blick(tabelle):
+                del self._ausstehend[tabelle]
+                auftrag()
+                nachgezogen = True
+        if nachgezogen:
+            self._auswahl_stellen()
+            self._mitgehen()
 
     def _mitgehen(self):
         """Die berechneten Tabellen zur Arbeitszeile rollen."""
@@ -1846,7 +1892,7 @@ class TrdfSeite(tk.Frame):
         self.vonhand[(zeile, spalte)] = wert
         if spalte == trdfrohpruefung.VARIANTE:
             self._variante_wirkt(zeile, wert)
-        self._rechnung_vergessen()
+        self._rechnung_vergessen([zeile])
         # Die Rohwerttabelle wird nicht neu gebaut - sonst faellt das
         # offene Eingabefeld heraus, und der naechste Tabulator ginge
         # ins Leere. Gefaerbt wird nur die eine Zelle.
@@ -1955,7 +2001,7 @@ class TrdfSeite(tk.Frame):
         for zeile, wert in varianten:
             self._variante_wirkt(zeile, wert)
         if varianten:
-            self._rechnung_vergessen()
+            self._rechnung_vergessen([zeile for zeile, _wert in varianten])
             self._zeigen(nur_ergebnisse=True)
             for zeile, _wert in varianten:
                 self._befund_nachtragen(zeile)
@@ -1976,7 +2022,7 @@ class TrdfSeite(tk.Frame):
                 tabelle.setzen(zeile, spalte, rohtext(spalte, wert))
                 tabelle.marke_setzen(zeile, spalte, "geaendert")
                 tabelle.marke_setzen(zeile, "Probe", "geaendert")
-        self._rechnung_vergessen()
+        self._rechnung_vergessen({zeile for zeile, _spalte, _wert in gesetzt})
         self._zeigen(nur_ergebnisse=True)
         for probe in {zeile for zeile, _, _ in gesetzt}:
             self._befund_nachtragen(probe)
@@ -2044,15 +2090,28 @@ class TrdfSeite(tk.Frame):
             self._ohne_hand[probe] = self._rechnen(probe, mit_hand=False)
         return self._ohne_hand[probe]
 
-    def _rechnung_vergessen(self):
-        """Nach jeder Aenderung: die gemerkten Rechnungen gelten nicht mehr."""
-        self._mit_hand, self._ohne_hand = {}, {}
+    def _rechnung_vergessen(self, proben=None):
+        """Nach einer Aenderung: die gemerkten Rechnungen gelten nicht mehr.
+
+        Mit `proben` nur die dieser Proben, und nur die mit Handwerten:
+        eine Handeingabe aendert nichts an der Rechnung ohne sie, und
+        nichts an den anderen Proben. Bei dreihundert Proben ist das der
+        Unterschied zwischen einer Rechnung je Eingabe und sechshundert.
+        Ohne Angabe - neue Quelle, Export - gilt nichts mehr.
+        """
+        if proben is None:
+            self._mit_hand, self._ohne_hand = {}, {}
+            return
+        for probe in proben:
+            self._mit_hand.pop(probe, None)
 
     def bewegt(self, probe: str) -> set:
         """Welche Groessen dieser Probe die Handeingabe verschoben hat."""
         bewegte = {kuerzel for (welche, kuerzel) in self.vonhand
                    if welche == probe}
-        if not self.vonhand:
+        # Ohne Handwert in dieser Probe rechnet sie mit und ohne dasselbe
+        # - die Rechnung ohne muss dann gar nicht erst laufen.
+        if not bewegte:
             return bewegte
         ohne, mit = self.gerechnet_ohne_hand(probe), self.gerechnet(probe)
         for kuerzel in self.folge:
@@ -2100,7 +2159,7 @@ class TrdfSeite(tk.Frame):
                     continue
                 gefunden.append(self._aenderung(eckdaten, kuerzel,
                                                 trdfexport.ROHWERT, alt, neu))
-            if not self.vonhand:
+            if not self.von_hand_bewegt(probe):
                 continue
             ohne, mit = self.gerechnet_ohne_hand(probe), self.gerechnet(probe)
             for kuerzel in self.folge:
@@ -2496,7 +2555,7 @@ class TrdfSeite(tk.Frame):
             if auseinander:
                 marken[(probe, BEWERTUNGSSPALTE)] = "abweichung"
             zeilen.append((probe, werte))
-        for tabelle in self.ergebnistabellen:
+        def fuellen(tabelle):
             tabelle.zellhinweise(self.ergebnishinweis)
             tabelle.fuellen(
                 spalten, zeilen, marken=marken,
@@ -2504,6 +2563,8 @@ class TrdfSeite(tk.Frame):
                          BEWERTUNGSSPALTE: 420},
                 fest=fest, ueberschriften=koepfe)
             self._kopfhinweise(tabelle, spalten)
+        for tabelle in self.ergebnistabellen:
+            self._fuellen(tabelle, lambda t=tabelle: fuellen(t))
         if sichtbar:
             gesamt = len(sichtbar) * len(gerechnet)
             verborgen = self.ausgeblendete_wiederholungen()
@@ -2566,14 +2627,16 @@ class TrdfSeite(tk.Frame):
                           if probe["bewertung"]}
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if kennung in mit_befund]
-        self.pruefungstabelle.zellhinweise(self.aufschlusshinweis)
-        self.pruefungstabelle.fuellen(
-            spalten, zeilen, marken=marken,
-            breiten=dict(BREITEN),
-            mitwachsend=(BEWERTUNGSSPALTE,), fest=fest,
-            ueberschriften=koepfe)
-        self._kopfhinweise(self.pruefungstabelle, spalten,
-                           trdfpruefung.QUELLEN)
+        def fuellen():
+            self.pruefungstabelle.zellhinweise(self.aufschlusshinweis)
+            self.pruefungstabelle.fuellen(
+                spalten, zeilen, marken=marken,
+                breiten=dict(BREITEN),
+                mitwachsend=(BEWERTUNGSSPALTE,), fest=fest,
+                ueberschriften=koepfe)
+            self._kopfhinweise(self.pruefungstabelle, spalten,
+                               trdfpruefung.QUELLEN)
+        self._fuellen(self.pruefungstabelle, fuellen)
         if gesamt:
             satz = (f"{gesamt - auffaellig} von {gesamt} Proben ohne Befund"
                     + (f"  |  {auffaellig} zu pruefen" if auffaellig else ""))
@@ -3144,6 +3207,7 @@ class TrdfSeite(tk.Frame):
         und den Ueberschriften, die unter \u201eInfo\u201c gewaehlt sind -,
         damit im Blatt steht, was auf dem Schirm stand.
         """
+        self._nachziehen(alle=True)
         tabelle = self.ergebnistabelle
         spalten = tabelle.spalten()
         kopf = [" ".join(tabelle.ueberschriftzeilen(name)) or name
