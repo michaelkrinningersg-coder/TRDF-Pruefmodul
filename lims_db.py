@@ -38,6 +38,7 @@ Bind-Variablen, nach einer bestaetigten Uebersicht und einer Sicherung.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import decimal
 import datetime as dt
@@ -552,6 +553,30 @@ def fehlertext(fehler: Exception) -> str:
 # --------------------------------------------------------------------------
 # Lesen
 # --------------------------------------------------------------------------
+
+@contextlib.contextmanager
+def sitzung(zugang):
+    """Eine Verbindung fuer alle Abfragen einer Aktion.
+
+    Ohne sie baut jede Abfrage ihre eigene Verbindung auf - mit
+    Anmeldung, und die kostet im Netz und erst recht im Thick Mode ein
+    Vielfaches der Abfrage selbst. Eine Serie zu laden waren so sechs
+    bis acht Anmeldungen hintereinander.
+
+    Hat der Zugang keine Verbindung zu bieten (in den Pruefungen ist er
+    ein blosser Platzhalter), kommt None: dann verbindet jede Abfrage
+    wie bisher selbst.
+    """
+    verbinden = getattr(zugang, "verbinden", None)
+    if verbinden is None:
+        yield None
+        return
+    verbindung = verbinden()
+    try:
+        yield verbindung
+    finally:
+        verbindung.close()
+
 
 def _zeilen(zugang, sql: str, bindungen: dict | None = None, verbindung=None):
     """Fuehrt eine Leseabfrage aus und gibt die Zeilen.

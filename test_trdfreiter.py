@@ -2321,6 +2321,91 @@ def test_eine_eingabe_rechnet_nur_ihre_probe_neu() -> None:
     mit_fenster(pruefen)
 
 
+# ------------------------------------- Eine Anmeldung je Aktion
+
+class ZaehlZugang:
+    """Ein Zugang, der Verbindungen und Abfragen zaehlt - ohne Datenbank.
+
+    Geantwortet wird mit leeren Zeilen, nur die Methodenliste einer
+    Serie bringt eine TRDF-Methode mit. Gerechnet wird gegen die echten
+    Abfragen aus lims_db.
+    """
+
+    benutzer, alias, protokoll, modus = "pruefer", "LIMS", None, "Thin Mode"
+
+    def __init__(self):
+        self.verbindungen = 0
+        self.abfragen = 0
+
+    def verbinden(self):
+        self.verbindungen += 1
+        zugang = self
+
+        class Cursor:
+            rowcount = 1
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *rest):
+                return None
+
+            def execute(self, sql, bindungen=None, **rest):
+                zugang.abfragen += 1
+                self.sql = " ".join(sql.lower().split())
+
+            def fetchall(self):
+                if "from teilproben t" in self.sql and "distinct" in self.sql:
+                    return [(42, "TRDF3.2")]
+                return []
+
+        class Verbindung:
+            def cursor(self):
+                return Cursor()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *rest):
+                return None
+
+            def close(self):
+                return None
+
+        return Verbindung()
+
+
+def test_eine_serie_laden_heisst_eine_anmeldung() -> None:
+    """Jede Abfrage mit eigener Verbindung hiess: jede mit eigener
+    Anmeldung. Eine Serie zu laden waren sechs davon."""
+    def pruefen(fenster):
+        zugang = ZaehlZugang()
+        blatt = trdfreiter.TrdfSeite(
+            fenster, lambda: zugang,
+            lambda arbeit, fertig, schief=None: fertig(arbeit()),
+            ordner=tempfile.mkdtemp(prefix="anmeldung-"))
+        zugang.verbindungen = zugang.abfragen = 0
+        blatt.v_serie.set("2026B051")
+        blatt.abgefragte_serie = "2026B051"
+        blatt.methodenwahl = trdfreiter.methodentexte([(42, "TRDF3.2")])
+        blatt.v_methode.set("TRDF3.2")
+        blatt._abrufen()
+        assert zugang.abfragen >= 6
+        assert zugang.verbindungen == 1
+        # Und die Methoden einer Serie: eine Anmeldung fuer alle Wege.
+        zugang.verbindungen = 0
+        blatt._abfragen()
+        assert zugang.verbindungen <= 2          # Methoden + Laden
+    mit_fenster(pruefen)
+
+
+def test_ohne_echten_zugang_verbindet_jede_abfrage_selbst() -> None:
+    """In den Pruefungen ist der Zugang ein Platzhalter - dann bleibt
+    alles beim Alten."""
+    with trdfreiter.lims_db.sitzung(object()) as verbindung:
+        assert verbindung is None
+
+
 # --------------------------------------------------- Die Grossansicht
 
 def eingetippt(tabelle, zeile, spalte, wert):

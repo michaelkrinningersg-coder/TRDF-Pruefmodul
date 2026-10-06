@@ -219,7 +219,7 @@ def _ohne_anhang(ergebnisse, anhang) -> list:
     return sorted({kennung for kennung in offen if kennung is not None})
 
 
-def _mit_nachtrag(zugang, um_id, ergebnisse, anhang) -> list:
+def _mit_nachtrag(zugang, um_id, ergebnisse, anhang, verbindung=None) -> list:
     """Den Anhang um die Zeilen anderer Anlagen derselben Probe ergaenzen.
 
     Der Teilprobenanhang haengt an der PROB_ID, und dieselbe Probe
@@ -235,7 +235,7 @@ def _mit_nachtrag(zugang, um_id, ergebnisse, anhang) -> list:
     if not offen:
         return list(anhang or [])
     return list(anhang or []) + lims_db.trdf_rohwerte_nachtrag(
-        zugang, offen, um_id)
+        zugang, offen, um_id, verbindung=verbindung)
 
 
 def _ohne_aufschluss(ergebnisse, aufschluss) -> list:
@@ -1147,8 +1147,10 @@ class TrdfSeite(tk.Frame):
             return
 
         def arbeit():
-            methoden = lims_db.trdf_methoden(zugang)
-            return lims_db.trdf_serien(zugang, [um for um, _ in methoden])
+            with lims_db.sitzung(zugang) as verbindung:
+                methoden = lims_db.trdf_methoden(zugang, verbindung=verbindung)
+                return lims_db.trdf_serien(zugang, [um for um, _ in methoden],
+                                           verbindung=verbindung)
 
         def fertig(serien):
             self.serienliste = list(serien)
@@ -1239,8 +1241,10 @@ class TrdfSeite(tk.Frame):
         self.update_idletasks()
 
         def arbeit():
-            return self.trdf_methoden_der_serie(
-                lims_db.methoden_fuer_serie(zugang, serie))
+            with lims_db.sitzung(zugang) as verbindung:
+                return self.trdf_methoden_der_serie(
+                    lims_db.methoden_fuer_serie(zugang, serie,
+                                                verbindung=verbindung))
 
         def fertig(passend):
             self._methoden_zeigen(serie, passend)
@@ -1327,23 +1331,35 @@ class TrdfSeite(tk.Frame):
         self.update_idletasks()
 
         def arbeit():
-            ergebnisse = lims_db.trdf_ergebnisse(zugang, serie, um_id)
-            # Der Aufschluss zuerst: danach steht fest, welchen Proben
-            # er fehlt, und nur nach denen wird nachgefragt. Steht er
-            # an jeder - der Regelfall -, entfaellt die Abfrage ganz.
-            aufschluss = lims_db.trdf_aufschluss(zugang, serie)
-            return {
-                "um_id": um_id, "kuerzel": kuerzel,
-                "methoden": lims_db.trdf_pruefmethoden(zugang, serie, um_id),
-                "rohwerte": lims_db.trdf_rohwertparameter(zugang, um_id),
-                "ergebnisse": ergebnisse,
-                "anhang": _mit_nachtrag(
-                    zugang, um_id, ergebnisse,
-                    lims_db.trdf_rohwerte_anhang(zugang, serie, um_id)),
-                "wgh": lims_db.trdf_wiederfindung(zugang, serie),
-                "aufschluss": aufschluss,
-                **_nachtragsteil(self._nachtrag_holen(
-                    zugang, _ohne_aufschluss(ergebnisse, aufschluss)))}
+            # Eine Verbindung fuer alle Abfragen dieses Abrufs - nicht
+            # eine Anmeldung je Abfrage.
+            with lims_db.sitzung(zugang) as v:
+                ergebnisse = lims_db.trdf_ergebnisse(zugang, serie, um_id,
+                                                     verbindung=v)
+                # Der Aufschluss zuerst: danach steht fest, welchen
+                # Proben er fehlt, und nur nach denen wird nachgefragt.
+                # Steht er an jeder - der Regelfall -, entfaellt die
+                # Abfrage ganz.
+                aufschluss = lims_db.trdf_aufschluss(zugang, serie,
+                                                     verbindung=v)
+                return {
+                    "um_id": um_id, "kuerzel": kuerzel,
+                    "methoden": lims_db.trdf_pruefmethoden(
+                        zugang, serie, um_id, verbindung=v),
+                    "rohwerte": lims_db.trdf_rohwertparameter(
+                        zugang, um_id, verbindung=v),
+                    "ergebnisse": ergebnisse,
+                    "anhang": _mit_nachtrag(
+                        zugang, um_id, ergebnisse,
+                        lims_db.trdf_rohwerte_anhang(zugang, serie, um_id,
+                                                     verbindung=v),
+                        verbindung=v),
+                    "wgh": lims_db.trdf_wiederfindung(zugang, serie,
+                                                      verbindung=v),
+                    "aufschluss": aufschluss,
+                    **_nachtragsteil(self._nachtrag_holen(
+                        zugang, _ohne_aufschluss(ergebnisse, aufschluss),
+                        verbindung=v))}
 
         def fertig(geholt):
             self._uebernehmen(geholt)
@@ -1351,7 +1367,7 @@ class TrdfSeite(tk.Frame):
 
         self._im_hintergrund(arbeit, fertig, self._schiefgegangen)
 
-    def _nachtrag_holen(self, zugang, prob_ids) -> tuple:
+    def _nachtrag_holen(self, zugang, prob_ids, verbindung=None) -> tuple:
         """Cges und CO3 ueber alle Anlagen dieser Proben.
 
         `prob_ids` sind die Proben, denen der Aufschluss *fehlt* - nicht
@@ -1366,7 +1382,8 @@ class TrdfSeite(tk.Frame):
         if not prob_ids:
             return [], ""
         try:
-            return lims_db.trdf_aufschluss_nachtrag(zugang, prob_ids), ""
+            return lims_db.trdf_aufschluss_nachtrag(
+                zugang, prob_ids, verbindung=verbindung), ""
         except Exception as fehler:               # noqa: BLE001
             return [], (f"Cges/CO3 nicht nachgefragt: "
                         f"{lims_db.fehlertext(fehler)}")
