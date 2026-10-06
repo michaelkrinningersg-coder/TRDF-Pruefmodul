@@ -144,6 +144,12 @@ def ohne_fenster() -> Meldungen:
     return meldungen
 
 
+# Die Pruefungen lesen die Tabellen aller Reiter, ohne den Reiter zu
+# wechseln - also wird alles sofort gezeichnet. Wie die Seite verdeckte
+# Reiter aufschiebt, pruefen eigene Faelle weiter unten.
+trdfreiter.TrdfSeite.sofort_zeichnen = True
+
+
 # Ein Zugang, der nur da ist: die Seite fragt, ob jemand angemeldet ist,
 # und geht mit ihm nie in die Datenbank - der Hintergrundlauf tut hier
 # nichts.
@@ -2233,6 +2239,85 @@ def test_ein_geaenderter_wert_steht_rot_und_nicht_grau() -> None:
             assert "trenner" not in tags, (stelle, tags)
         assert "geaendert" in feld.tag_names(
             f"{nummer}.{von + tabelle._breiten['GMSZ'] - 1}")
+    mit_fenster(pruefen)
+
+
+# ------------------------------------- Verdeckte Reiter: erst beim Oeffnen
+
+def aufschiebende_seite(fenster):
+    """Eine Seite wie im Betrieb: verdeckte Reiter warten."""
+    blatt = seite(fenster)
+    blatt.sofort_zeichnen = False
+    blatt.reiter.select(0)
+    return blatt
+
+
+def test_eine_eingabe_zeichnet_verdeckte_reiter_nicht_sofort() -> None:
+    def pruefen(fenster):
+        blatt = aufschiebende_seite(fenster)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        # Ergebnisse und Pruefblatt liegen verdeckt - sie warten.
+        assert blatt.ergebnistabelle in blatt._veraltet
+        assert blatt.pruefungstabelle in blatt._veraltet
+        assert blatt.ergebnistabelle.marke("26B0011", "TRD_TRDF ber.") \
+            != "geaendert"
+        # Die Statuszeile ist trotzdem auf dem neuen Stand.
+        assert "Werten stimmen" in blatt.stand.cget("text")
+    mit_fenster(pruefen)
+
+
+def test_der_reiter_zieht_beim_oeffnen_nach() -> None:
+    def pruefen(fenster):
+        blatt = aufschiebende_seite(fenster)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        blatt.reiter.select(1)
+        blatt._nachziehen()            # was <<NotebookTabChanged>> ausloest
+        assert blatt.ergebnistabelle not in blatt._veraltet
+        assert blatt.ergebnistabelle.marke("26B0011", "TRD_TRDF ber.") \
+            == "geaendert"
+        assert blatt.pruefungstabelle in blatt._veraltet    # noch verdeckt
+        blatt.reiter.select(2)
+        blatt._nachziehen()
+        assert blatt.pruefungstabelle.marke("26B0011", "Probe-Nr.") \
+            == "geaendert"
+    mit_fenster(pruefen)
+
+
+def test_aufgeklappte_berechnete_groessen_gehen_sofort_mit() -> None:
+    def pruefen(fenster):
+        blatt = aufschiebende_seite(fenster)
+        blatt._berechnete_umschalten(merken=False)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        assert blatt.berechnet_oben not in blatt._veraltet
+        assert blatt.berechnet_oben.marke("26B0011", "TRD_TRDF ber.") \
+            == "geaendert"
+    mit_fenster(pruefen)
+
+
+def test_das_ergebnisblatt_liest_den_neuen_stand() -> None:
+    """Auch wenn der Reiter verdeckt war: das Blatt zeigt, was gilt."""
+    def pruefen(fenster):
+        blatt = aufschiebende_seite(fenster)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        kopf, zeilen = blatt.ergebnisblatt()
+        zeile = next(z for z in zeilen if "26B0011" in z)
+        assert "1,200" in zeile[kopf.index("TRD_TRDF ber.")]
+    mit_fenster(pruefen)
+
+
+def test_eine_eingabe_rechnet_nur_ihre_probe_neu() -> None:
+    def pruefen(fenster):
+        blatt = seite(fenster)
+        for _lnr, probe in blatt.proben:
+            blatt.gerechnet(probe)
+        gemerkt = dict(blatt._mit_hand)
+        blatt._von_hand_geaendert("26B0011", "TRDFgesch", "1,2")
+        for probe in ("26B0001", "26B0005", "26B0033"):
+            assert blatt._mit_hand[probe] is gemerkt[probe], probe
+        assert blatt._mit_hand["26B0011"] is not gemerkt["26B0011"]
+        # Ohne Handeingabe ist "ohne Hand" dieselbe Rechnung.
+        assert blatt.gerechnet_ohne_hand("26B0005") is \
+            blatt.gerechnet("26B0005")
     mit_fenster(pruefen)
 
 

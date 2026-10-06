@@ -43,6 +43,7 @@ entscheidend.
 """
 
 import decimal
+import functools
 import re
 
 D = decimal.Decimal
@@ -70,6 +71,18 @@ def zerlegen(quelle):
         if treffer.lastgroup != "leer":
             marken.append((treffer.lastgroup, treffer.group()))
     return marken
+
+
+@functools.lru_cache(maxsize=512)
+def zerlegt(quelle):
+    """Dieselbe Zerlegung - gemerkt je Formeltext.
+
+    Eine Serie hat ein Dutzend Formeln, gerechnet werden sie fuer jede
+    Probe, und nach jeder Eingabe wieder. Den Text jedes Mal neu zu
+    zerlegen war die Haelfte der Rechenzeit; die Marken aendern sich nie
+    und werden beim Auswerten nur gelesen, deshalb als Tupel.
+    """
+    return tuple(zerlegen(quelle))
 
 
 class Auswerter:
@@ -273,7 +286,7 @@ def rechnen(formel, werte, ziel, abfragen=None):
     """Fuehrt eine Formel aus und gibt den Wert des Zielkuerzels."""
     umgebung = dict(werte)
     try:
-        auswerter = Auswerter(zerlegen(formel), umgebung, abfragen)
+        auswerter = Auswerter(zerlegt(formel), umgebung, abfragen)
         while auswerter.schau()[1] is not None:
             auswerter.anweisung()
     except Exception as fehler:                      # noqa: BLE001

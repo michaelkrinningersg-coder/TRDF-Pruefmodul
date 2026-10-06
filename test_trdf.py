@@ -501,6 +501,20 @@ def test_gross_und_kleinschreibung_stoert_die_liste_nicht():
 
 # --------------------------------------------------------------------------
 
+
+def test_die_zerlegung_wird_je_formel_gemerkt():
+    """Dieselbe Formel wird nicht bei jeder Probe neu zerlegt - und die
+    gemerkten Marken werden beim Auswerten nicht veraendert."""
+    formel = "if (_TRDV == 1) {X=A/B;} else {X=A*B;}"
+    trdfformel.zerlegt.cache_clear()
+    erst = trdfformel.rechnen(formel, {"_TRDV": D(1), "A": D(6), "B": D(3)},
+                              "X")
+    dann = trdfformel.rechnen(formel, {"_TRDV": D(2), "A": D(6), "B": D(3)},
+                              "X")
+    assert (erst, dann) == (D(2), D(18))
+    assert trdfformel.zerlegt.cache_info().hits >= 1
+    assert trdfformel.zerlegt(formel) == tuple(trdfformel.zerlegen(formel))
+
 def main() -> int:
     pruefungen = [(name, wert) for name, wert in sorted(globals().items())
                   if name.startswith("test_") and callable(wert)]
