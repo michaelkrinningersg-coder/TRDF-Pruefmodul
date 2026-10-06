@@ -3237,6 +3237,13 @@ def test_eine_wiederholung_steht_als_eigene_zeile_mit_um_und_me():
         blatt._uebernehmen(mit_wiederholung(geholt(zeilen=(5, 11))))
         assert [probe for _lnr, probe in blatt.proben] == [
             "26B0005", "26B0011", "26B0011 1/2"]
+        # Von Haus aus steht die Wiederholung nicht da - erst mit Haken.
+        for tabelle in (blatt.rohtabelle, blatt.ergebnistabelle,
+                        blatt.pruefungstabelle):
+            assert "26B0011 1/2" not in tabelle.zeilen()
+            assert "26B0011" in tabelle.zeilen()
+        blatt.v_wiederholungen.set(True)
+        blatt._wiederholungen_umschalten()
         for tabelle, spalte in ((blatt.rohtabelle, "Probe"),
                                 (blatt.ergebnistabelle, "Probe"),
                                 (blatt.pruefungstabelle, "Probe-Nr.")):
@@ -3258,6 +3265,35 @@ def test_eine_wiederholung_steht_als_eigene_zeile_mit_um_und_me():
         zeile = [z for z in blatt.rohblatt() if z["probe"] == "26B0011 1/2"]
         assert trdfrohpruefung.zeile(zeile[0], blatt.rohliste)[1:4] == [
             "26B0011", 1, 2]
+    mit_fenster(pruefen)
+
+
+def test_wiederholungen_stehen_unten_erst_um_dann_me_nach_nummer():
+    def pruefen(fenster):
+        blatt = trdfreiter.TrdfSeite(fenster, lambda: ZUGANG,
+                                     lambda *a, **k: None,
+                                     ordner=AUSWEICHORDNER)
+        blatt.v_serie.set("2026B051")
+        roh = geholt(zeilen=(1, 5, 11, 33))
+        # Absichtlich durcheinander angelegt: LNR sagt nichts ueber
+        # die Folge der Wiederholungen.
+        mit_wiederholung(roh, prob_id=33, neu_id=133, um=1, me=2, lnr=40)
+        mit_wiederholung(roh, prob_id=5, neu_id=105, um=1, me=2, lnr=41)
+        mit_wiederholung(roh, prob_id=11, neu_id=111, um=2, me=1, lnr=42)
+        mit_wiederholung(roh, prob_id=1, neu_id=101, um=2, me=1, lnr=43)
+        mit_wiederholung(roh, prob_id=5, neu_id=205, um=1, me=3, lnr=2)
+        blatt._uebernehmen(roh)
+        erste = ["26B0001", "26B0005", "26B0011", "26B0033"]
+        assert blatt.rohtabelle.zeilen() == erste
+        assert "ausgeblendet" in blatt.stand.cget("text")
+        blatt.v_wiederholungen.set(True)
+        blatt._wiederholungen_umschalten()
+        folge = erste + ["26B0001 2/1", "26B0011 2/1",
+                         "26B0005 1/2", "26B0033 1/2", "26B0005 1/3"]
+        for tabelle in (blatt.rohtabelle, blatt.ergebnistabelle,
+                        blatt.pruefungstabelle):
+            assert tabelle.zeilen() == folge, tabelle.zeilen()
+        assert "ausgeblendet" not in blatt.stand.cget("text")
     mit_fenster(pruefen)
 
 

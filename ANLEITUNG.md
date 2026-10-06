@@ -65,7 +65,9 @@ Gut zu wissen:
 
 ### Wiederholungen: Spalten UM und ME
 
-Neben der Probennummer stehen in allen Reitern die Spalten **UM** (Wiederholung der Untersuchungsmethode) und **ME** (Wiederholung der Messung) aus der Probentabelle. Die Erstmessung hat 1/1. Wurde eine Probe wiederholt, steht sie mit derselben Probennummer in einer eigenen Zeile, z. B. UM 1 / ME 2. Im Bodenblock, in der Exportübersicht und im Exportbericht heißt diese Zeile `26B0011 1/2`. Eine eingefügte UM trifft die Wiederholung über ihre Spalten UM und Me.
+Neben der Probennummer stehen in allen Reitern die Spalten **UM** (Wiederholung der Untersuchungsmethode) und **ME** (Wiederholung der Messung) aus der Probentabelle. Die Erstmessung hat 1/1.
+
+Wiederholungen (UM oder ME ungleich 1) sind **standardmäßig ausgeblendet**; die Statuszeile sagt, wie viele. Das kleine Häkchen **„UM/ME ≠ 1“** oben neben der Untersuchungsmethode blendet sie in allen Reitern und Blättern ein. Sie stehen dann unter den Erstmessungen, jede mit derselben Probennummer in einer eigenen Zeile: zuerst die UM-Wiederholungen (UM 2, dann UM 3 …), danach die ME-Wiederholungen (ME 2, dann ME 3 …), jeweils nach Probennummer sortiert. Im Bodenblock, in der Exportübersicht und im Exportbericht heißt diese Zeile `26B0011 1/2`. Eine eingefügte UM trifft die Wiederholung über ihre Spalten UM und Me.
 
 ### Wie viele Stellen die Rohwerte zeigen
 

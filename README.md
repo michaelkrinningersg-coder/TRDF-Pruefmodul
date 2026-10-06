@@ -54,9 +54,11 @@ Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
    von Hand geändert wurde, und jede dadurch bewegte Größe stehen rot.
    Die Maus auf einer roten Zelle zeigt den alten Wert und „von → auf“.
 
-   Wiederholungen (WDH_UM/WDH_ME über 1) werden mitgeholt und stehen als
-   eigene Zeile da; die Spalten **UM** und **ME** stehen in allen Reitern
-   neben der Probennummer.
+   Wiederholungen (WDH_UM/WDH_ME über 1) werden mitgeholt, sind aber
+   von Haus aus ausgeblendet; das Häkchen **„UM/ME ≠ 1“** holt sie als
+   eigene Zeilen unter die Erstmessungen (erst UM 2, dann ME 2, jeweils
+   nach Probennummer). Die Spalten **UM** und **ME** stehen in allen
+   Reitern neben der Probennummer.
 
    Die Erklärtexte stehen hinter den kleinen **i** neben Überschrift und
    Knopfleisten (Maus darauf oder Klick).

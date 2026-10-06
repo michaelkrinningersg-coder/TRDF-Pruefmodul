@@ -587,6 +587,23 @@ class TrdfSeite(tk.Frame):
                                  anchor="w")
         self.auskunft.pack(side="left", padx=(16, 0))
         wahl.grid_columnconfigure(5, weight=1)
+        # Wiederholungen (UM oder ME ueber 1) stehen von Haus aus nicht
+        # da: gearbeitet wird an der Erstmessung. Ein Haken holt sie
+        # unter die Erstmessungen - in allen Reitern.
+        self.v_wiederholungen = tk.BooleanVar(value=False)
+        self.schalter_wiederholungen = tk.Checkbutton(
+            wahl, text="UM/ME ≠ 1", variable=self.v_wiederholungen,
+            command=self._wiederholungen_umschalten, bg=Style.CARD,
+            fg=Style.MUTED, activebackground=Style.CARD,
+            font=Style.font(8), padx=0, pady=0, bd=0,
+            highlightthickness=0)
+        self.schalter_wiederholungen.grid(row=0, column=5, sticky="w")
+        ToolTip(self.schalter_wiederholungen,
+                "Zeigt auch die Wiederholungen - Proben, deren UM oder ME\n"
+                "nicht 1 ist. Sie stehen unter den Erstmessungen: zuerst\n"
+                "die Wiederholungen der Untersuchungsmethode (UM 2, ...),\n"
+                "dann die der Messung (ME 2, ...), jeweils nach\n"
+                "Probennummer. Gilt fuer alle Reiter und die Blaetter.")
         self.knopf_export = RoundedButton(
             titel, text="Export", width=120, height=28,
             bg="#15803d", command=self._lims_schreiben)
@@ -1908,7 +1925,8 @@ class TrdfSeite(tk.Frame):
         if spalte is not None:
             if spalte not in self.rohliste:
                 return []
-            zellen = [(name, spalte) for _lnr, name in self.proben]
+            zellen = [(name, spalte)
+                      for _lnr, name in self.sichtbare_proben()]
             wo = f"Spalte {spalte}"
         else:
             zellen = [(probe, kuerzel) for kuerzel in self.rohliste]
@@ -2154,7 +2172,7 @@ class TrdfSeite(tk.Frame):
         """Alle Proben mit ihren Werten und ihrem Urteil - nach Probe-Nr."""
         blatt = []
         aus_der_serie = self._serienblick()
-        for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
+        for lnr, probe in self.sichtbare_proben(nach_nummer=True):
             werte = self.pruefwerte(probe)
             bewertung = (trdfpruefung.bewerten(werte)
                          + aus_der_serie.get(probe, []))
@@ -2178,6 +2196,54 @@ class TrdfSeite(tk.Frame):
             self._rohwerte_zeigen()
         self._ergebnisse_zeigen()
         self._pruefung_zeigen()
+
+    def ist_wiederholung(self, probe: str) -> bool:
+        """Ob diese Zeile eine Wiederholung ist - UM oder ME ueber 1."""
+        _nummer, um, me = self.probenangabe(probe)
+        return um != 1 or me != 1
+
+    def _wiederholungsfolge(self, eintrag) -> tuple:
+        """Wo eine Wiederholung steht: erst UM 2, 3 ..., dann ME 2, 3 ...
+
+        Innerhalb jeder Stufe nach Probennummer.
+        """
+        lnr, probe = eintrag
+        nummer, um, me = self.probenangabe(probe)
+        if um != 1:
+            return (0, um, nummer, me, lnr is None, lnr or 0)
+        return (1, me, nummer, 0, lnr is None, lnr or 0)
+
+    def sichtbare_proben(self, nach_nummer=False) -> list:
+        """Die Proben, die die Tabellen zeigen - (lnr, probe), in ihrer Folge.
+
+        Zuerst die Erstmessungen: nach Zeile oder, mit `nach_nummer`,
+        nach Probennummer wie im Pruefblatt. Die Wiederholungen nur mit
+        dem Haken „UM/ME ≠ 1“, und dann darunter.
+        """
+        erste = [eintrag for eintrag in self.proben
+                 if not self.ist_wiederholung(eintrag[1])]
+        if nach_nummer:
+            erste.sort(key=lambda p: (p[1], p[0] is None, p[0] or 0))
+        if not self.zeigt_wiederholungen():
+            return erste
+        weitere = [eintrag for eintrag in self.proben
+                   if self.ist_wiederholung(eintrag[1])]
+        return erste + sorted(weitere, key=self._wiederholungsfolge)
+
+    def zeigt_wiederholungen(self) -> bool:
+        schalter = getattr(self, "v_wiederholungen", None)
+        return bool(schalter is not None and schalter.get())
+
+    def ausgeblendete_wiederholungen(self) -> int:
+        """Wie viele Wiederholungen gerade nicht dastehen."""
+        if self.zeigt_wiederholungen():
+            return 0
+        return sum(1 for _lnr, probe in self.proben
+                   if self.ist_wiederholung(probe))
+
+    def _wiederholungen_umschalten(self):
+        self._zeigen()
+        self._auswahl_stellen()
 
     def probenangabe(self, probe: str) -> tuple:
         """Probennummer, UM und ME zu einer Zeile - (Nummer, 1, 1) ohne Angabe."""
@@ -2260,7 +2326,7 @@ class TrdfSeite(tk.Frame):
                                  STELLEN_WGH),
                  "bewertung": self.rohbefund(probe),
                  **self._wiederholungsteil(probe)}
-                for lnr, probe in self.proben]
+                for lnr, probe in self.sichtbare_proben()]
 
     def _kopfhinweise(self, tabelle, spalten, quellen=None):
         """Was ueber den Spaltenueberschriften steht, wenn die Maus wartet.
@@ -2370,7 +2436,8 @@ class TrdfSeite(tk.Frame):
         spalten, gruppen, fest, koepfe, _alle = self._ergebnisspalten()
         zeilen, marken = [], {}
         abweichungen = 0
-        for lnr, probe in self.proben:
+        sichtbar = self.sichtbare_proben()
+        for lnr, probe in sichtbar:
             ergebnis = self.gerechnet(probe)
             werte = {}
             werte.update({
@@ -2437,12 +2504,15 @@ class TrdfSeite(tk.Frame):
                          BEWERTUNGSSPALTE: 420},
                 fest=fest, ueberschriften=koepfe)
             self._kopfhinweise(tabelle, spalten)
-        if self.proben:
-            gesamt = len(self.proben) * len(gerechnet)
+        if sichtbar:
+            gesamt = len(sichtbar) * len(gerechnet)
+            verborgen = self.ausgeblendete_wiederholungen()
             self._melden(
                 f"{gesamt - abweichungen} von {gesamt} Werten stimmen"
                 + (f"  |  {abweichungen} Abweichungen" if abweichungen
-                   else ""),
+                   else "")
+                + (f"  |  {verborgen} Wiederholungen (UM/ME \u2260 1) "
+                   f"ausgeblendet" if verborgen else ""),
                 Style.WARN if abweichungen else Style.TEXT)
 
     def _pruefspalten(self) -> tuple:
@@ -2621,7 +2691,7 @@ class TrdfSeite(tk.Frame):
         ankommt, will nicht oben wieder anfangen, sondern merken, dass
         er unten ist.
         """
-        namen = [probe for _lnr, probe in self.proben]
+        namen = [probe for _lnr, probe in self.sichtbare_proben()]
         if block.probe not in namen:
             return
         stelle = namen.index(block.probe) + richtung
