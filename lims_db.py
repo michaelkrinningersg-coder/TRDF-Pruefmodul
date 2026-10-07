@@ -1535,25 +1535,47 @@ def trdf_zurueck_pruefen(satz: dict):
                          + ", ".join(fehlend))
 
 
-def trdf_nachlesen_sql() -> str:
-    """Was jetzt wirklich in der Ergebniszeile steht.
+NACHLESEN_JE_FRAGE = 200
+"""So viele Saetze fragt eine Nachlese-Abfrage auf einmal ab.
 
-    Derselbe Schluessel wie beim Schreiben - Wort fuer Wort, damit die
-    Nachfrage dieselbe Zeile trifft und nicht eine benachbarte.
+Eine Liste in IN (...) darf bei Oracle hoechstens 1000 Eintraege haben;
+200 bleibt weit darunter und haelt die Anweisung kurz genug fuer den
+Statement-Cache.
+"""
+
+ERGEBNIS_SCHLUESSEL = ("prob_id", "pm_id", "pm_ver", "um_id", "gegr_id")
+ANHANG_SCHLUESSEL = ("prob_id", "um_id", "rohw_id")
+
+
+def _in_liste(spalten: tuple, anzahl: int) -> str:
+    """`(a, b) IN ((:a0, :b0), (:a1, :b1), ...)` fuer `anzahl` Saetze."""
+    tupel = ", ".join(
+        "(" + ", ".join(f":{spalte}{nummer}" for spalte in spalten) + ")"
+        for nummer in range(anzahl))
+    return f"({', '.join(spalten)}) IN ({tupel})"
+
+
+def trdf_nachlesen_sql(anzahl: int = 1) -> str:
+    """Was jetzt wirklich in den Ergebniszeilen steht - fuer `anzahl`
+    Saetze in einer Abfrage.
+
+    Gefragt wird mit demselben Schluessel wie beim Schreiben. GEGR_ID
+    darf leer sein, und NULL faende in einer IN-Liste nie etwas; deshalb
+    steht sie nur in der Antwort und wird in Python verglichen.
     """
-    return """
-        SELECT mw_roh FROM ergebnisse
-         WHERE prob_id = :prob_id AND pm_id = :pm_id AND pm_ver = :pm_ver
-           AND um_id = :um_id
-           AND (gegr_id = :gegr_id OR (gegr_id IS NULL AND :gegr_id IS NULL))
+    return f"""
+        SELECT prob_id, pm_id, pm_ver, um_id, gegr_id, mw_roh
+          FROM ergebnisse
+         WHERE {_in_liste(ERGEBNIS_SCHLUESSEL[:-1], anzahl)}
     """
 
 
-def trdf_anhang_nachlesen_sql() -> str:
+def trdf_anhang_nachlesen_sql(anzahl: int = 1) -> str:
     """Dasselbe fuer den Teilprobenanhang."""
-    return """
-        SELECT mw FROM teilproben_anhang
-         WHERE prob_id = :prob_id AND um_id = :um_id AND rohw_id = :rohw_id
+    return f"""
+        SELECT prob_id, um_id, rohw_id, mw
+          FROM teilproben_anhang
+         WHERE {_in_liste(ANHANG_SCHLUESSEL, anzahl)}
     """
 
 
@@ -1571,19 +1593,55 @@ def _angekommen(steht_da, gewollt) -> bool:
     return eine is not None and andere is not None and eine == andere
 
 
-def _nachpruefen(cursor, sql: str, saetze, schluessel: tuple) -> list:
+def _schluesselwert(wert):
+    """Eine ID so, dass 7, 7.0 und Decimal("7") derselbe Schluessel sind."""
+    if wert is None:
+        return None
+    if isinstance(wert, bool):
+        return wert
+    try:
+        ganz = int(wert)
+        if ganz == wert:
+            return ganz
+    except (TypeError, ValueError):
+        pass
+    return str(wert).strip()
+
+
+def _nachpruefen(cursor, sql_fuer, saetze, schluessel: tuple,
+                 gefragt: tuple | None = None) -> list:
     """Liest die geschriebenen Zeilen zurueck und meldet, was nicht ankam.
 
     Ein UPDATE, das keine Zeile trifft, ist kein Fehler - es ist nur
     nichts geschehen. Ein UPDATE, das eine Zeile trifft und trotzdem den
     alten Wert stehen laesst, waere einer, und beides sieht von aussen
     gleich aus. Deshalb wird nachgesehen, nachdem festgeschrieben wurde.
+
+    Gefragt wird als Sammelabfrage: je `NACHLESEN_JE_FRAGE` Saetze eine
+    Rundreise statt einer je Satz. `sql_fuer(anzahl)` liefert die
+    Anweisung, die Antwort traegt vorne `schluessel` und zuletzt den
+    Wert. `gefragt` sind die Spalten, die in der Anweisung gebunden
+    werden (ohne Angabe: alle aus `schluessel`).
     """
+    saetze = list(saetze)
+    gefragt = schluessel if gefragt is None else gefragt
+    steht_da = {}
+    for anfang in range(0, len(saetze), NACHLESEN_JE_FRAGE):
+        stueck = saetze[anfang:anfang + NACHLESEN_JE_FRAGE]
+        bindungen = {f"{feld}{nummer}": satz[feld]
+                     for nummer, satz in enumerate(stueck)
+                     for feld in gefragt}
+        cursor.execute(sql_fuer(len(stueck)), bindungen)
+        for zeile in cursor.fetchall() or ():
+            zeile = tuple(zeile)
+            schluesselteil = tuple(_schluesselwert(wert)
+                                   for wert in zeile[:len(schluessel)])
+            steht_da.setdefault(schluesselteil, zeile[-1])
     geblieben = []
     for satz in saetze:
-        cursor.execute(sql, {feld: satz[feld] for feld in schluessel})
-        zeile = cursor.fetchone()
-        if zeile is None or not _angekommen(zeile[0], satz["wert"]):
+        ziel = tuple(_schluesselwert(satz[feld]) for feld in schluessel)
+        if ziel not in steht_da or not _angekommen(steht_da[ziel],
+                                                    satz["wert"]):
             geblieben.append(satz)
     return geblieben
 
@@ -1676,13 +1734,13 @@ def trdf_exportieren(zugang: Zugang, saetze: list[dict], hinweise=None,
         # Transaktion ohnehin ihre eigenen Aenderungen.
         with verbindung.cursor() as cursor:
             geblieben = _nachpruefen(
-                cursor, trdf_nachlesen_sql(),
+                cursor, trdf_nachlesen_sql,
                 [satz for satz in saetze if satz not in ohne_zeile],
-                ("prob_id", "pm_id", "pm_ver", "um_id", "gegr_id"))
+                ERGEBNIS_SCHLUESSEL, gefragt=ERGEBNIS_SCHLUESSEL[:-1])
             anhang_geblieben = _nachpruefen(
-                cursor, trdf_anhang_nachlesen_sql(),
+                cursor, trdf_anhang_nachlesen_sql,
                 [satz for satz in anhang if satz not in anhang_ohne],
-                ("prob_id", "um_id", "rohw_id"))
+                ANHANG_SCHLUESSEL)
     except Exception:
         verbindung.rollback()
         raise

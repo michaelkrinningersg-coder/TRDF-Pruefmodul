@@ -1397,19 +1397,36 @@ class NachleseCursor(ExportCursor):
     """Ein Cursor, der auf die Nachfrage einen bestimmten Wert liefert.
 
     `steht_da` ist, was nach dem Schreiben in der Datenbank steht - eine
-    Zeichenkette, oder None fuer "die Zeile gibt es nicht".
+    Zeichenkette, oder None fuer "die Zeile gibt es nicht". Geantwortet
+    wird wie Oracle auf die Sammelabfrage: je gefragtem Satz eine Zeile
+    mit Schluessel und Wert, GEGR_ID aus `gegr_id`.
     """
 
-    def __init__(self, steht_da="1,7", **rest):
+    def __init__(self, steht_da="1,7", gegr_id=7, **rest):
         super().__init__(**rest)
         self.steht_da = steht_da
+        self.gegr_id = gegr_id
         self.nachgefragt = []
+        self.abfragen = 0
 
     def execute(self, sql, *args, **kwargs):
         if sql.lstrip().upper().startswith("SELECT"):
-            self.nachgefragt.append(args[0] if args else kwargs)
-            self.zeilen = ([] if self.steht_da is None
-                           else [(self.steht_da,)])
+            Cursor.execute(self, sql, *args, **kwargs)
+            bindungen = args[0] if args else kwargs
+            self.nachgefragt.append(bindungen)
+            self.abfragen += 1
+            anhang = "teilproben_anhang" in sql
+            felder = (("prob_id", "um_id", "rohw_id") if anhang
+                      else ("prob_id", "pm_id", "pm_ver", "um_id"))
+            self.zeilen = []
+            nummer = 0
+            while f"prob_id{nummer}" in bindungen and self.steht_da is not None:
+                schluessel = tuple(bindungen[f"{feld}{nummer}"]
+                                   for feld in felder)
+                if not anhang:
+                    schluessel += (self.gegr_id,)
+                self.zeilen.append(schluessel + (self.steht_da,))
+                nummer += 1
             return None
         return super().execute(sql, *args, **kwargs)
 
@@ -1424,8 +1441,8 @@ def test_nach_dem_schreiben_wird_nachgelesen() -> None:
     assert bericht["geschrieben"] == 1
     assert bericht["nicht_uebernommen"] == []
     # Gefragt wurde mit demselben Schluessel, mit dem geschrieben wurde.
-    assert cursor.nachgefragt[0] == {"prob_id": 11, "pm_id": 1084,
-                                     "pm_ver": 1, "um_id": 42, "gegr_id": 7}
+    assert cursor.nachgefragt[0] == {"prob_id0": 11, "pm_id0": 1084,
+                                     "pm_ver0": 1, "um_id0": 42}
 
 
 def test_ein_alter_wert_nach_dem_schreiben_faellt_auf() -> None:
@@ -1435,6 +1452,52 @@ def test_ein_alter_wert_nach_dem_schreiben_faellt_auf() -> None:
     bericht = lims_db.trdf_exportieren(Zugang(verbindung), [_trdf_satz()])
     assert bericht["geschrieben"] == 1          # getroffen hat sie
     assert len(bericht["nicht_uebernommen"]) == 1   # geaendert nicht
+
+
+def test_eine_fehlende_zeile_beim_nachlesen_faellt_auf() -> None:
+    verbindung = Verbindung([], [])
+    cursor = NachleseCursor(steht_da=None, rowcount=1)
+    verbindung.cursor = lambda: cursor
+    bericht = lims_db.trdf_exportieren(Zugang(verbindung), [_trdf_satz()])
+    assert len(bericht["nicht_uebernommen"]) == 1
+
+
+def test_eine_andere_gruppe_zaehlt_nicht_als_angekommen() -> None:
+    """GEGR_ID steht nicht in der IN-Liste - verglichen wird sie trotzdem."""
+    verbindung = Verbindung([], [])
+    cursor = NachleseCursor(steht_da="1,7", gegr_id=8, rowcount=1)
+    verbindung.cursor = lambda: cursor
+    bericht = lims_db.trdf_exportieren(Zugang(verbindung), [_trdf_satz()])
+    assert len(bericht["nicht_uebernommen"]) == 1
+
+
+def test_eine_leere_gruppe_wird_gefunden() -> None:
+    """NULL faende in der IN-Liste nichts; deshalb vergleicht Python."""
+    verbindung = Verbindung([], [])
+    cursor = NachleseCursor(steht_da="1,7", gegr_id=None, rowcount=1)
+    verbindung.cursor = lambda: cursor
+    bericht = lims_db.trdf_exportieren(Zugang(verbindung),
+                                        [_trdf_satz(gegr_id=None)])
+    assert bericht["nicht_uebernommen"] == []
+
+
+def test_nachgelesen_wird_als_sammelabfrage() -> None:
+    """Eine Rundreise je 200 Saetze statt einer je Satz."""
+    verbindung = Verbindung([], [])
+    cursor = NachleseCursor(steht_da="1,7", rowcount=1)
+    verbindung.cursor = lambda: cursor
+    saetze = [_trdf_satz(prob_id=1000 + n) for n in range(450)]
+    anhang = [{"prob_id": 1000 + n, "um_id": 42, "rohw_id": 5, "wert": "1,7"}
+              for n in range(3)]
+    bericht = lims_db.trdf_exportieren(Zugang(verbindung), saetze,
+                                        anhang=anhang)
+    assert bericht["nicht_uebernommen"] == []
+    assert bericht["anhang_nicht_uebernommen"] == []
+    # 450 Ergebniszeilen in 3 Stuecken, der Anhang in einem.
+    assert cursor.abfragen == 4
+    assert len(cursor.nachgefragt[0]) == 4 * lims_db.NACHLESEN_JE_FRAGE
+    assert "IN ((:prob_id0, :um_id0, :rohw_id0))" in " ".join(
+        lims_db.trdf_anhang_nachlesen_sql(1).split())
 
 
 def test_nachgelesen_wird_erst_nach_dem_festschreiben() -> None:
