@@ -15,6 +15,12 @@
   let fenster = $state(null);
   let zug = null;
 
+  // Beim Oeffnen den Fokus nehmen - sonst gehen Pfeil rauf und runter an
+  // die Tabelle dahinter statt an den Block.
+  $effect(() => {
+    fenster?.focus();
+  });
+
   function greifen(e) {
     if (e.button !== 0 || e.target.closest("button")) return;
     onVorne?.();
@@ -71,8 +77,8 @@
       <span class="zaehler">{daten.stelle + 1} / {daten.anzahl}</span>
     </div>
     <div class="knoepfe">
-      <button onclick={() => onWechsel(-1)} disabled={daten.stelle <= 0} aria-label="Vorige Probe" type="button">▲</button>
-      <button onclick={() => onWechsel(1)} disabled={daten.stelle >= daten.anzahl - 1} aria-label="Nächste Probe" type="button">▼</button>
+      <button onclick={() => { onWechsel(-1); fenster?.focus(); }} disabled={daten.stelle <= 0} aria-label="Vorige Probe" type="button">▲</button>
+      <button onclick={() => { onWechsel(1); fenster?.focus(); }} disabled={daten.stelle >= daten.anzahl - 1} aria-label="Nächste Probe" type="button">▼</button>
       <button onclick={onZu} aria-label="Schließen" type="button">✕</button>
     </div>
   </header>

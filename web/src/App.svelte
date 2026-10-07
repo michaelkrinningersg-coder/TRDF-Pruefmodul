@@ -41,8 +41,10 @@
   let nurBefunde = $state(false);
   let dichte = $state(leseDichte());
   let arbeitszeile = $state(null);
+  let blick = $state(null); // welche Probe die Tabellen in den Blick rollen
   let bloecke = $state([]);
   let oberstes = $state(30);
+  let blockNummer = 0; // fester Schluessel je Blockfenster
 
   let laeuft = $state(0);
   let einfuegen = $state(null);
@@ -255,6 +257,7 @@
         x: Math.max(20, window.innerWidth - 700 - versatz),
         y: 150 + versatz,
         z: ++oberstes,
+        id: ++blockNummer,
       },
     ];
   }
@@ -267,21 +270,44 @@
   }
 
   async function blockWechseln(b, richtung) {
-    const antwort = await rufe("nachbar", b.probe, richtung);
-    if (!antwort?.probe) return;
-    const schon = bloecke.find((x) => x.probe === antwort.probe);
+    // Gleich hier: wer zweimal schnell drueckt, will zwei Proben weiter -
+    // eine Rueckfrage je Taste kaeme mit derselben Ausgangsprobe zurueck.
+    const proben = zustand?.proben ?? [];
+    const stelle = proben.indexOf(b.probe) + richtung;
+    if (stelle < 0 || stelle >= proben.length) return;
+    const ziel = proben[stelle];
+    const schon = bloecke.find((x) => x.probe === ziel);
     if (schon) {
       vorne(schon);
+      blick = ziel;
       return;
     }
-    const daten = await rufe("block", antwort.probe);
-    if (daten.fehler) return;
-    b.probe = antwort.probe;
-    b.daten = daten;
+    await blockZeigen(b, ziel);
+  }
+
+  // Ein Block zeigt eine andere Probe - sofort umgestellt, damit ein
+  // zweiter Klick nicht noch ein Fenster oeffnet; das Bild kommt nach.
+  async function blockZeigen(b, probe) {
+    b.probe = probe;
+    blick = probe;
+    const daten = await rufe("block", probe);
+    if (!daten.fehler && b.probe === probe) b.daten = daten;
+  }
+
+  // In einer Tabelle wurde eine andere Probe gewaehlt: der vorderste
+  // Block geht mit - so blaettert man mit der Tabelle durch die Bloecke.
+  function zeileGewaehlt(probe) {
+    if (!bloecke.length) return;
+    if (bloecke.some((b) => b.probe === probe)) {
+      vorne(bloecke.find((b) => b.probe === probe));
+      return;
+    }
+    const vorderster = bloecke.reduce((a, b) => (b.z > a.z ? b : a));
+    blockZeigen(vorderster, probe);
   }
 
   function vorne(b) {
-    b.z = ++oberstes;
+    if (b.z !== oberstes) b.z = ++oberstes;
   }
 
   // ------------------------------------------------------ UM einfuegen
@@ -556,9 +582,10 @@
                   spalten={tafeln?.ergebnis.spalten ?? []}
                   zeilen={tafeln?.ergebnis.zeilen ?? []}
                   {auswahl}
-                  sehen={arbeitszeile}
+                  sehen={blick}
                   zeilenhoehe={zeilenhoehe - 4}
                   onProbe={blockOeffnen}
+              onZeileGewaehlt={zeileGewaehlt}
                   onSpalteVerschieben={(von, nach) => spalteVerschieben("ergebnis", "roh", von, nach)}
                 />
               </div>
@@ -578,7 +605,9 @@
               onSetzen={setzen}
               onFuellen={fuellen}
               onProbe={blockOeffnen}
-              onZeile={(p) => (arbeitszeile = p)}
+              onZeileGewaehlt={zeileGewaehlt}
+              onZeile={(p) => { arbeitszeile = p; blick = p; }}
+              sehen={blick}
               onMeldung={rasterMeldung}
               onSpalteVerschieben={(von, nach) => spalteVerschieben("roh", "roh", von, nach)}
             />
@@ -602,9 +631,10 @@
               spalten={tafeln?.ergebnis.spalten ?? []}
               zeilen={tafeln?.ergebnis.zeilen ?? []}
               {auswahl}
-              sehen={arbeitszeile}
+              sehen={blick}
               {zeilenhoehe}
               onProbe={blockOeffnen}
+              onZeileGewaehlt={zeileGewaehlt}
               onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
@@ -633,9 +663,10 @@
               zeilen={tafeln?.pruefung.zeilen ?? []}
               {auswahl}
               {nurBefunde}
-              sehen={arbeitszeile}
+              sehen={blick}
               {zeilenhoehe}
               onProbe={blockOeffnen}
+              onZeileGewaehlt={zeileGewaehlt}
               onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
@@ -663,6 +694,7 @@
               {zeilenhoehe}
               leerText="Es wurde in dieser Sitzung noch nichts geschrieben."
               onProbe={blockOeffnen}
+              onZeileGewaehlt={zeileGewaehlt}
             />
           {/if}
         </div>
@@ -670,13 +702,13 @@
     </main>
   </div>
 
-  {#each bloecke as b (b.z)}
+  {#each bloecke as b (b.id)}
     <Block
       daten={b.daten}
       x={b.x}
       y={b.y}
       z={b.z}
-      onZu={() => (bloecke = bloecke.filter((x) => x !== b))}
+      onZu={() => (bloecke = bloecke.filter((x) => x.id !== b.id))}
       onWechsel={(r) => blockWechseln(b, r)}
       onVorne={() => vorne(b)}
       onZiehen={(x, y) => { b.x = x; b.y = y; }}

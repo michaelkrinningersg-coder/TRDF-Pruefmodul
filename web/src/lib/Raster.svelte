@@ -25,6 +25,7 @@
     onZeile = null,
     onMeldung = null,
     onSpalteVerschieben = null,
+    onZeileGewaehlt = null,
   } = $props();
 
   const PROBENSPALTEN = new Set(["Probe", "Probe-Nr."]);
@@ -156,7 +157,14 @@
     }
     zeiger = { r, c };
     zeigen(r, c);
+    // Eine andere Probe gewaehlt - ein offener Block geht mit.
+    const id = sichtbar[r]?.id;
+    if (id && id !== letzteWahl) {
+      letzteWahl = id;
+      onZeileGewaehlt?.(id);
+    }
   }
+  let letzteWahl = null;
 
   // ------------------------------------------------------------ Werte
   function istLeer(zeile, name) {
