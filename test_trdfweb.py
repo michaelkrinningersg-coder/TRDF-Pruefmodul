@@ -499,6 +499,38 @@ def test_selbsttest_prueft_webview_und_die_seite():
     assert code == 1
 
 
+def _gefundene_module(datei: str) -> set:
+    """Was ein Startpunkt statisch nach sich zieht - wie PyInstaller."""
+    import modulefinder
+    ordner = os.path.dirname(os.path.abspath(__file__))
+    finder = modulefinder.ModuleFinder(path=[ordner] + sys.path,
+                                       excludes=["oracledb", "webview"])
+    finder.run_script(os.path.join(ordner, datei))
+    return set(finder.modules)
+
+
+def test_die_tk_exe_packt_ihre_fenster_mit():
+    """Die Tk-Fenster werden in trdfblock & Co. nur verzoegert geladen -
+    die Tk-Seite muss sie deshalb selbst importieren, sonst fehlen sie in
+    der exe (\"No module named 'trdflegendefenster'\")."""
+    module = _gefundene_module("trdfpruefmodul.py")
+    for name in ("trdfblockfenster", "trdflegendefenster", "trdfbildfenster"):
+        assert name in module, name
+
+
+def test_die_web_exe_packt_keine_tk_seite():
+    module = _gefundene_module("trdfweb.py")
+    for name in ("trdfreiter", "eingaberaster", "trdflegendefenster",
+                 "test_trdfreiter"):
+        assert name not in module, name
+
+
+def test_das_fenstersymbol_ist_unter_windows_eine_ico():
+    """WinForms nimmt kein PNG - die exe beendete sich sonst sofort."""
+    assert trdfweb.SYMBOL_WINDOWS.endswith(".ico")
+    assert os.path.isfile(trdfweb.ressource(trdfweb.SYMBOL_WINDOWS))
+
+
 # --------------------------------------------------------------------------
 
 def main() -> int:

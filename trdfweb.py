@@ -57,6 +57,10 @@ APP_VERSION = "v2.0"
 # in der exe im ausgepackten Ordner.
 WEBORDNER = "webdist"
 
+# Das Fenstersymbol: unter Windows nur als .ico.
+SYMBOL_WINDOWS = "Icon.ico"
+SYMBOL = "Icon.png"
+
 # Die Breiten der Spalten in Bildpunkten - wie in der Tk-Fassung, nur
 # etwas grosszuegiger, weil die Schrift der Seite breiter laeuft.
 BREITEN_ROH = {"Zeile": 64, "Probe": 112, "WGH": 80, BEWERTUNGSSPALTE: 460}
@@ -1302,11 +1306,13 @@ def fenster_starten(api: Api):
         height=900, min_size=(1000, 640), background_color="#f4f6fa",
         text_select=True, maximized=True)
     api._fenster_setzen(fenster)
-    # Unter Windows Edge WebView2; das Fenstersymbol nimmt pywebview dort
-    # aus der exe.
-    webview.start(gui="edgechromium" if sys.platform == "win32" else None,
+    # Unter Windows Edge WebView2. Das Fenstersymbol muss dort eine .ico
+    # sein - WinForms (System.Drawing.Icon) nimmt kein PNG und beendet das
+    # Programm sonst mit einer unbehandelten .NET-Ausnahme.
+    windows = sys.platform == "win32"
+    webview.start(gui="edgechromium" if windows else None,
                   debug=bool(os.environ.get("TRDF_WEB_DEBUG")),
-                  icon=ressource("Icon.png"))
+                  icon=ressource(SYMBOL_WINDOWS if windows else SYMBOL))
 
 
 def main(argumente=None) -> int:

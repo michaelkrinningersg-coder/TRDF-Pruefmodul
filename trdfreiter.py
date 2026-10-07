@@ -64,9 +64,12 @@ import eingaberaster
 import lims_db
 import trdf
 import trdfbild
+import trdfbildfenster
 import trdfblock
+import trdfblockfenster
 import trdfexport
 import trdflegende
+import trdflegendefenster
 import trdfpruefung
 import trdfrohpruefung
 import trdfserie
@@ -753,7 +756,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
         reihenfolge, fest = self.spaltenordnung(titel)
         schluessel = {spalte: trdflegende.schluessel(spalte, quellen)
                       for spalte in (zeile[0] for zeile in zeilen)}
-        fenster = trdflegende.Legendenfenster(
+        fenster = trdflegendefenster.Legendenfenster(
             self, titel, spalten, zeilen,
             speichern=lambda texte, ordnung, blatt=titel:
                 self._spalten_speichern(blatt, texte, ordnung),
@@ -1360,7 +1363,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
             self._block_auffrischen(zeile)
             vorhandenes.lift()
             return
-        fenster = trdfblock.zeigen(
+        fenster = trdfblockfenster.zeigen(
             ueber or self, zeile, self.rohsatz(zeile), self.gerechnet(zeile),
             bei_wechsel=self._block_wechseln)
         self.bloecke[zeile] = fenster
@@ -2152,7 +2155,7 @@ class Bildfenster(tk.Toplevel):
                  bg=Style.BG, fg=Style.MUTED, font=Style.font(9), anchor="w",
                  justify="left", wraplength=700).pack(
             fill="x", padx=16, pady=(0, 10))
-        self.bild = trdfbild.Streubild(self, bei_klick=self._punkt_geklickt)
+        self.bild = trdfbildfenster.Streubild(self, bei_klick=self._punkt_geklickt)
         self.bild.pack(padx=16)
         self.stand = tk.Label(self, text="", bg=Style.BG, fg=Style.MUTED,
                               font=Style.font(9), anchor="w")
