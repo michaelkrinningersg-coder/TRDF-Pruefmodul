@@ -78,7 +78,8 @@ from trdfmodell import (AUSEINANDER, BEWERTUNGSSPALTE, BLATT_ERGEBNIS,  # noqa: 
                         QUELLEN, ROHWERTE_UNVOLLSTAENDIG, STELLEN, STELLEN_WGH,
                         TrdfModell, _mit_nachtrag, _nachtragsteil,
                         _ohne_anhang, _ohne_aufschluss, _probenkennungen,
-                        methodentexte, probenart, zahltext)
+                        methodentexte, probenart, vorschauhinweis,
+                        zahltext)
 from widgets import RoundedButton, Style, ToolTip
 
 # Was im Exportbericht steht, solange nichts geschrieben wurde. Der
@@ -2062,71 +2063,9 @@ class Exportvorschau(tk.Toplevel):
                             f"ueberschrieben", bg=Style.BG, fg=Style.TEXT,
                  font=Style.font(12, "bold"), anchor="w").pack(
             fill="x", padx=16, pady=(14, 2))
-        ohne = trdfexport.ohne_zeile(self.aenderungen)
+        hinweis = vorschauhinweis(self.aenderungen, zurueck, nur_anhang)
         wieder = [] if zurueck or nur_anhang else trdfexport.schon_korrigiert(
             self.aenderungen)
-        if nur_anhang:
-            hinweis = ("Geschrieben wird nur der Teilprobenanhang: er "
-                       "bekommt den Wert, der in der Ergebniszeile steht. "
-                       "Die Ergebniszeile selbst wird nicht angefasst - sie "
-                       "ist hier die Vorlage. „Wert aktuell LIMS“ ist der "
-                       "Stand am Anhang, „Wert neu“ der aus der "
-                       "Ergebnistabelle. Der bisherige Wert des Anhangs "
-                       "geht wie immer nach MW_OLD, und der Stand von jetzt "
-                       f"vorher in den Ordner „{trdfexport.ORDNER}“.")
-        elif zurueck:
-            hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
-                       "MW_ROH und MW, der Bearbeitungsstand, das "
-                       "Korrekturkennzeichen und FC8 - und am "
-                       "Teilprobenanhang MW und MW_OLD. Eine neue Sicherung "
-                       "entsteht dabei nicht: die Datei, die gerade gelesen "
-                       "wird, ist sie.")
-            allein = trdfexport.ohne_anhang(self.aenderungen)
-            if allein:
-                hinweis += (
-                    f" ACHTUNG: {len(allein)} Rohwerte dieser Sicherung "
-                    "tragen keine ROHW_ID - fuer sie wird nur die "
-                    "Ergebniszeile zurueckgestellt, waehrend der "
-                    "Teilprobenanhang auf dem korrigierten Wert stehen "
-                    "bleibt. Danach rechnet das LIMS mit einer anderen "
-                    "Zahl als der, die in der Ergebnistabelle steht; die "
-                    "Pruefung meldet das als „Rohwert am Anhang weicht "
-                    "ab“. Solche Sicherungen stammen aus einer aelteren "
-                    "Fassung von LabControl.")
-            leer = trdfexport.geleert(self.aenderungen)
-            if leer:
-                hinweis += (f" Bei {len(leer)} Werten stand vor der "
-                            "Korrektur nichts - dort steht danach wieder "
-                            f"nichts („{trdf.MARKE}“ in der Spalte "
-                            "„Wert neu“).")
-        else:
-            hinweis = ("In ERGEBNISSE werden MW_ROH und MW mit demselben "
-                       f"Wert geschrieben, dazu FC8 = „{lims_db.TRDF_FC8}“, "
-                       "der Bearbeitungsstand und das Korrekturkennzeichen. "
-                       "Ein Rohwert haengt zusaetzlich am Teilprobenanhang - "
-                       "aus ihm rechnet das LIMS -, dort wird MW mitgesetzt "
-                       "und der bisherige Wert nach MW_OLD gehoben. Der "
-                       "Stand von jetzt geht vorher in den Ordner "
-                       f"„{trdfexport.ORDNER}“.")
-        mit_x = trdfexport.markiert(self.aenderungen)
-        leer = trdfexport.geleert(self.aenderungen)
-        if not zurueck and (mit_x or leer):
-            teile = []
-            if mit_x:
-                teile.append(f"{len(mit_x)} Werte bekommen ein „"
-                             f"{trdf.MARKE}“ (hier soll nichts stehen)")
-            if leer:
-                teile.append(f"{len(leer)} Werte werden geleert")
-            hinweis += (" " + " und ".join(teile) + " - so, wie es die "
-                        "Eingabemaske des LIMS beim Wechsel der Variante "
-                        "auch tut.")
-        if ohne:
-            hinweis += (f" {len(ohne)} Werte haben im LIMS keine "
-                        "Ergebniszeile - sie werden gemeldet und nicht "
-                        "angelegt.")
-        if wieder:
-            hinweis += (f" {len(wieder)} Zeilen tragen schon ein "
-                        "Korrekturkennzeichen: dort war bereits jemand.")
         tk.Label(self, text=hinweis, bg=Style.BG, fg=Style.MUTED,
                  font=Style.font(9), anchor="w", justify="left",
                  wraplength=960).pack(fill="x", padx=16, pady=(0, 10))

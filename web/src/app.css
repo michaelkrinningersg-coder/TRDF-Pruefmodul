@@ -1,0 +1,203 @@
+/* TRDF-Pruefmodul - Grundlage der Seite: Farben, Schrift, Knoepfe. */
+
+:root {
+  --bg: #f4f6fa;
+  --flaeche: #ffffff;
+  --flaeche-2: #f8fafc;
+  --rand: #e2e8f0;
+  --rand-stark: #cbd5e1;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #94a3b8;
+  --akzent: #2563eb;
+  --akzent-hell: #dbeafe;
+  --akzent-zart: #eff6ff;
+  --gruen: #15803d;
+  --gruen-hell: #dcfce7;
+  --rot: #dc2626;
+  --rot-hell: #fee2e2;
+  --rot-zart: #fef2f2;
+  --amber: #b45309;
+  --amber-hell: #fef3c7;
+  --violett: #6d28d9;
+  --violett-hell: #ede9fe;
+  --gruppe: #f1f5f9;
+  --auswahl: #e0ecff;
+  --schatten: 0 1px 2px rgb(15 23 42 / 6%), 0 4px 16px rgb(15 23 42 / 6%);
+  --schatten-hoch: 0 10px 40px rgb(15 23 42 / 18%), 0 2px 6px rgb(15 23 42 / 8%);
+  --radius: 10px;
+  --schrift: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Inter", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--schrift);
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ----------------------------------------------------------- Knoepfe */
+.knopf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--rand-stark);
+  background: var(--flaeche);
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.knopf:hover:not(:disabled) {
+  background: var(--flaeche-2);
+  border-color: var(--text-3);
+}
+.knopf:focus-visible {
+  outline: 2px solid var(--akzent);
+  outline-offset: 1px;
+}
+.knopf:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.knopf.klein {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.knopf.primaer {
+  background: var(--akzent);
+  border-color: var(--akzent);
+  color: #fff;
+}
+.knopf.primaer:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+.knopf.gruen {
+  background: var(--gruen);
+  border-color: var(--gruen);
+  color: #fff;
+}
+.knopf.gruen:hover:not(:disabled) {
+  background: #166534;
+  border-color: #166534;
+}
+.knopf.leise {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+}
+.knopf.leise:hover:not(:disabled) {
+  background: var(--gruppe);
+  border-color: transparent;
+}
+
+.zahlmarke {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 25%);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ------------------------------------------------------------ Felder */
+.feld {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rand-stark);
+  background: var(--flaeche);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.feld:focus {
+  border-color: var(--akzent);
+  box-shadow: 0 0 0 3px var(--akzent-hell);
+}
+.feld:disabled {
+  background: var(--flaeche-2);
+  color: var(--text-3);
+}
+
+.beschriftung {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
+
+/* ------------------------------------------------------------ Stand */
+.stand {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stand.warn {
+  color: var(--amber);
+}
+.stand.fehler {
+  color: var(--rot);
+}
+.stand.leer {
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------- Rollbalken */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

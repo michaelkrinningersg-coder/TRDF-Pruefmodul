@@ -1,0 +1,13 @@
+# TRDF-Pruefmodul (Weboberflaeche) - Abhaengigkeiten
+# ==================================================
+# Das Fenster ist pywebview mit Edge WebView2 (unter Windows ueber
+# pythonnet); die Seite selbst ist gebaut (web/ -> webdist/) und braucht zur
+# Laufzeit nichts weiter.
+#
+# python-oracledb: nicht auf 4.x anheben - siehe requirements.txt (Thick Mode
+# mit dem Oracle-Client 11.2 unter C:\Oracle\11.2.0).
+oracledb>=3.4,<4.0
+pywebview==6.2.1
+
+# Nur zum BAUEN der Windows-.exe:
+pyinstaller==6.11.1

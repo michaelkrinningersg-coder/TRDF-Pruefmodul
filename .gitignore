@@ -11,3 +11,6 @@ einstellungen/
 protokoll/
 trdf_backup/
 TRDF-Pruefung/
+webdist/
+web/node_modules/
+startfehler.txt

@@ -60,6 +60,65 @@ Bilder und PDF lassen sich neu erzeugen (`docs/anleitung_bilder.py`,
    und dann geschrieben (Ergebniszeile und Teilprobenanhang in einer
    Transaktion, danach wird nachgelesen).
 
+## Weboberfläche: pywebview + Svelte (Zweig `feature/pywebview-svelte`)
+
+Dieselbe Einzelauswertung mit einem anderen Gesicht: ein Fenster mit **Edge
+WebView2**, darin eine **Svelte**-Seite, dazwischen die Python-JS-Brücke von
+**pywebview**. Gerechnet, geprüft und geschrieben wird mit denselben Modulen
+wie in der Tk-Fassung – das gemeinsame Modell steht in `trdfmodell.py`.
+
+| Schicht | Technik | Datei |
+|---|---|---|
+| Fenster | pywebview 6 (WebView2 über pythonnet), ohne Konsole | `trdfweb.py` |
+| Brücke | `window.pywebview.api.<name>()` → `trdfweb.Api` | `trdfweb.py`, `web/src/lib/api.js` |
+| Modell | Rechnen, Prüfen, Tabelleninhalt, Abruf, UM, Variante | `trdfmodell.py` |
+| Datenbank | python-oracledb (Thin, Thick-Fallback 11.2, x86) | `lims_db.py` |
+| Seite | Svelte 5 + Vite 8, eine einzige `index.html` (~130 KB) | `web/` → `webdist/` |
+| Raster | eigenes virtualisiertes Raster mit Excel-Kürzeln | `web/src/lib/Raster.svelte` |
+| Paket | PyInstaller `--onefile --windowed`, x86 | `.github/workflows/build-web-exe.yml` |
+
+**Warum Svelte und nicht React:** Svelte kompiliert zu schlankem JavaScript
+ohne virtuelles DOM – die ganze Seite ist rund 130 KB groß, startet sofort
+und aktualisiert bei einer Eingabe nur die Zellen, die sich ändern. Für ein
+Raster, in dem nach jeder Zahl ein paar Dutzend Zellen umfärben, ist das der
+schnellste Weg. Statt TanStack/Tabulator steht ein eigenes Raster da (eine
+Svelte-Datei): virtualisiert, feste Spalten links, und genau die Tastenkürzel
+der Tk-Fassung (Strg+C/V, Strg+D, Strg+Shift+D, Strg+L, Strg+I, Strg+E,
+Strg+Shift+E, Variante x/0/1–7).
+
+**Schnell:** Eine Eingabe rechnet nur ihre Probe neu und schickt nur deren
+Zeilen zurück (wenige Millisekunden); das Laden von 360 Proben dauert in
+Python rund 0,7 s.
+
+**Voraussetzung am Arbeitsplatz:** die WebView2-Laufzeit. Unter Windows 10/11
+ist sie mit Edge in aller Regel schon da.
+
+### exe herunterladen
+
+Workflow **TRDF-Pruefmodul Web-EXE bauen** → Artefakt
+`TRDF-Pruefmodul-Web-x86-<Zweig>` → `TRDF-Pruefmodul-Web-x86.exe` starten.
+Vor dem Bauen laufen alle Prüfungen, danach ein Selbsttest der exe
+(cryptography, pywebview, tnsnames.ora mit LIMS, Thin-Mode-Stack, Seite im
+Paket) und ein Startversuch des Fensters.
+
+### Aus dem Quelltext
+
+```
+cd web && npm ci && npm run build && cd ..     # baut webdist/index.html
+pip install -r requirements-web.txt
+python trdfweb.py                               # das Fenster
+```
+
+Entwicklung im Browser, ohne Datenbank, mit einer erfundenen Serie:
+
+```
+python trdfweb.py --dienst 8765 --demo          # Python-Seite
+cd web && npm run dev                           # Vite mit Hot Reload, http://localhost:5173
+```
+
+`--dienst` liefert `webdist/` aus und beantwortet `POST /api/<Methode>` –
+nur für Entwicklung und Bilder; das Programm selbst braucht keinen Server.
+
 ## Datenbankverbindung: tnsnames.ora
 
 Der Connect-Deskriptor kommt aus der **`tnsnames.ora`** (die Datei aus
@@ -113,12 +172,14 @@ Ist neben der exe kein Schreiben möglich, weichen die Einstellungen nach
 | Datei | Rolle |
 |---|---|
 | `trdfpruefmodul.py` | Startpunkt: Anmeldung und Hauptfenster |
-| `trdfreiter.py` | die Seite *TRDF Pruefung* (Auswahl, Tabellen, Rückweg) |
+| `trdfreiter.py` | die Seite *TRDF Pruefung* (Tk: Auswahl, Tabellen, Rückweg) |
+| `trdfmodell.py` | das Modell der Seite ohne Oberfläche – Tk und Web stehen darauf |
+| `trdfweb.py`, `web/` | die Weboberfläche (pywebview + Svelte) |
 | `trdf.py`, `trdfformel.py` | Nachrechnen mit den Formeln aus `PRUEFMETHODEN.FORMEL` |
 | `trdfpruefung.py`, `trdfrohpruefung.py`, `trdfserie.py` | Plausibilitätsprüfungen |
-| `trdfblock.py`, `trdfbild.py` | Bodenblock und Streubild |
+| `trdfblock.py`, `trdfbild.py` | Bodenblock und Streubild (Daten); die Tk-Fenster in `trdfblockfenster.py`, `trdfbildfenster.py` |
 | `trdfexport.py` | Rückweg in das LIMS: Übersicht, Sicherung, Zurückspielen |
-| `trdflegende.py` | Legende und Spaltenordnung |
+| `trdflegende.py` | Legende und Spaltenordnung; das Tk-Fenster in `trdflegendefenster.py` |
 | `lims_db.py` | Datenschicht (nur Anmeldung, TRDF-Abfragen, TRDF-Rückweg), GUI-frei |
 | `eingaberaster.py`, `widgets.py` | GUI-Bausteine aus LabControl |
 | `config.py`, `protokoll.py`, `druck.py` | Einstellungen, Änderungsprotokoll, Öffnen von Dateien |

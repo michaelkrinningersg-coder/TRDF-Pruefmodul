@@ -746,7 +746,7 @@ def csv_bloecke(bloecke, abstand: int = 3) -> bytes:
 # Selbsttest
 # --------------------------------------------------------------------------
 
-def selbsttest() -> tuple[int, list[str]]:
+def selbsttest(oberflaeche=("tkinter",)) -> tuple[int, list[str]]:
     """Prueft ohne Datenbank, ob alle Laufzeitbestandteile mitgeliefert wurden.
 
     python-oracledb laedt cryptography erst beim Verbindungsaufbau nach; fehlt
@@ -766,12 +766,15 @@ def selbsttest() -> tuple[int, list[str]]:
         zeilen.append(f"  FEHLER: cryptography fehlt ({fehler})")
         return 1, zeilen
 
-    try:
-        import tkinter                                      # noqa: F401
-        zeilen.append("  tkinter vorhanden")
-    except Exception as fehler:
-        zeilen.append(f"  FEHLER: tkinter fehlt ({fehler})")
-        return 1, zeilen
+    # Was die Oberflaeche braucht: tkinter fuer die Tk-Fassung, pywebview
+    # fuer die Weboberflaeche.
+    for modul in oberflaeche:
+        try:
+            __import__(modul)
+            zeilen.append(f"  {modul} vorhanden")
+        except Exception as fehler:
+            zeilen.append(f"  FEHLER: {modul} fehlt ({fehler})")
+            return 1, zeilen
 
     try:
         gefunden = deskriptoren()

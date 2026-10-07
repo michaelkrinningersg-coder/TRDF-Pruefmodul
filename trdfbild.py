@@ -161,9 +161,9 @@ def bild(proben, breite=BREITE, hoehe=HOEHE) -> dict:
         x, dichte, farbe = gefunden
         punkte.append({"probe": probe.get("probe"), "x": _x(x, breite),
                        "y": _y(dichte, hoehe), "farbe": farbe,
-                       "trdf": _zahl(dichte),
-                       "corg": _zahl(x) if farbe != FARBE_OHNE_AUFSCHLUSS
-                       else ""})
+                       "trdf": _zahl(dichte.quantize(D("0.001"))),
+                       "corg": _zahl(x.quantize(D("0.1")))
+                       if farbe != FARBE_OHNE_AUFSCHLUSS else ""})
     return {
         "breite": breite, "hoehe": hoehe,
         "links": RAND_LINKS, "rechts": breite - RAND_RECHTS,
@@ -183,6 +183,8 @@ _FENSTER = ('Streubild',)
 
 def __getattr__(name):
     if name in _FENSTER:
-        import trdfbildfenster
-        return getattr(trdfbildfenster, name)
+        # importlib, damit PyInstaller die Tk-Fenster nicht in die
+        # Web-exe packt.
+        import importlib
+        return getattr(importlib.import_module("trdfbildfenster"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

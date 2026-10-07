@@ -1,0 +1,166 @@
+name: TRDF-Pruefmodul Web-EXE bauen
+
+# Die Weboberflaeche: pywebview (Edge WebView2) + Svelte/Vite.
+#
+#   * Erst die Seite: web/ wird mit Node gebaut und landet als eine einzige
+#     Datei in webdist/index.html - ohne Server, ohne Nachladen.
+#   * Dann Python 3.11 in x86 (32-bit), wie bei der Tk-Fassung: der
+#     Thick-Mode-Fallback braucht denselben Bitness-Stand wie der
+#     Oracle-Client unter C:\Oracle\11.2.0.
+#   * PyInstaller --onefile --windowed: eine exe, die ohne Konsolenfenster
+#     startet. tkinter bleibt draussen - das Fenster ist WebView2.
+#   * Danach ein Selbsttest der fertigen exe und ein Startversuch.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["web-v*"]
+    paths:
+      - "**.py"
+      - "web/**"
+      - "requirements-web.txt"
+      - "constraints-x86.txt"
+      - "tnsnames.ora"
+      - "Icon.*"
+      - ".github/workflows/build-web-exe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Web x86
+    runs-on: windows-latest
+
+    steps:
+      - name: Code herunterladen
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Oberflaeche bauen (Svelte + Vite)
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          Get-Item ..\webdist\index.html | Select-Object Name, Length
+
+      - name: Python 3.11 einrichten (x86)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: x86
+
+      - name: Bitness pruefen
+        run: |
+          $bits = python -c "import struct; print(8*struct.calcsize('P'))"
+          Write-Host "Python laeuft als $bits-bit"
+          if ($bits -ne "32") { throw "Falsche Bitness: $bits statt 32" }
+
+      - name: Abhaengigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-web.txt -c constraints-x86.txt
+          python -m pip list
+
+      - name: Alle Pruefungen
+        run: python pruefungen_laufen.py
+
+      - name: Vorherige Build-Artefakte entfernen
+        run: |
+          if (Test-Path build) { Remove-Item build -Recurse -Force }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+
+      - name: EXE mit PyInstaller bauen
+        # webdist/ ist die gebaute Seite. webview bringt seine .NET- und
+        # WebView2-Bibliotheken (auch win-x86) als Daten mit; pythonnet und
+        # clr_loader laden die .NET-Laufzeit. cryptography importiert
+        # python-oracledb erst zur Laufzeit.
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name "TRDF-Pruefmodul-Web-x86"
+          --icon=Icon.ico
+          --add-data "webdist;webdist"
+          --add-data "Icon.png;."
+          --add-data "Icon.ico;."
+          --add-data "tnsnames.ora;."
+          --collect-all cryptography
+          --collect-all webview
+          --collect-all pythonnet
+          --collect-all clr_loader
+          --hidden-import clr
+          --exclude-module tkinter
+          --exclude-module _tkinter
+          --exclude-module matplotlib
+          --exclude-module pytest
+          --exclude-module PyQt5
+          --exclude-module PyQt6
+          --exclude-module PySide2
+          --exclude-module PySide6
+          --exclude-module qtpy
+          --exclude-module gi
+          trdfweb.py
+
+      - name: Groesse der exe
+        run: |
+          $exe = Get-Item "dist\TRDF-Pruefmodul-Web-x86.exe"
+          Write-Host ("{0:N1} MB" -f ($exe.Length / 1MB))
+
+      - name: Selbsttest der fertigen exe
+        run: |
+          $exe = "dist\TRDF-Pruefmodul-Web-x86.exe"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--selbsttest" `
+            -Wait -PassThru -RedirectStandardOutput selbsttest-ausgabe.log
+          $code = $proc.ExitCode
+          foreach ($pfad in @("selbsttest-ausgabe.log", "dist\selbsttest.log")) {
+            if (Test-Path $pfad) { Write-Host "--- $pfad ---"; Get-Content $pfad }
+          }
+          if ($code -ne 0) { throw "Selbsttest fehlgeschlagen (Exit $code)" }
+          Write-Host "Selbsttest bestanden (Exit 0)"
+
+      - name: WebView2-Laufzeit auf dem Runner
+        run: |
+          $schluessel = @(
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}")
+          foreach ($s in $schluessel) {
+            if (Test-Path $s) { Write-Host "WebView2: $((Get-ItemProperty $s).pv)" }
+          }
+
+      # Faengt ab, was erst beim Oeffnen des Fensters schiefgeht - eine
+      # fehlende .NET- oder WebView2-Bibliothek im Paket.
+      - name: Startet die Oberflaeche wirklich?
+        run: |
+          $exe = "dist\TRDF-Pruefmodul-Web-x86.exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 15
+          if (Test-Path "dist\startfehler.txt") {
+            Get-Content "dist\startfehler.txt"
+            throw "Die Anwendung meldet einen Startfehler"
+          }
+          if ($proc.HasExited) {
+            throw "Die Anwendung hat sich nach dem Start sofort beendet (Exit $($proc.ExitCode))"
+          }
+          $fenster = Get-Process -Id $proc.Id | Select-Object -ExpandProperty MainWindowTitle
+          Write-Host "Fenstertitel: '$fenster'"
+          Write-Host "Oberflaeche laeuft nach 15 Sekunden noch - ok"
+          Stop-Process -Id $proc.Id -Force
+
+      - name: Kennung des Stands bilden
+        run: |
+          $ref = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'
+          "STAND=$ref" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Fertige EXE als Download bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: TRDF-Pruefmodul-Web-x86-${{ env.STAND }}
+          path: dist/TRDF-Pruefmodul-Web-x86.exe
+          if-no-files-found: error
+          retention-days: 90

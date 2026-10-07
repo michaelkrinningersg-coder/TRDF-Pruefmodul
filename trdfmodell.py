@@ -220,6 +220,80 @@ def zahltext(wert, stellen=STELLEN) -> str:
     return str(gerundet).replace(".", ",")
 
 
+def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False) -> str:
+    """Was ueber der Uebersicht vor dem Schreiben steht.
+
+    Dieselben Saetze in beiden Oberflaechen: was geschrieben wird, wohin
+    der alte Stand geht, und was an den Zeilen auffaellt.
+    """
+    ohne = trdfexport.ohne_zeile(aenderungen)
+    wieder = [] if zurueck or nur_anhang else trdfexport.schon_korrigiert(
+        aenderungen)
+    if nur_anhang:
+        hinweis = ("Geschrieben wird nur der Teilprobenanhang: er "
+                   "bekommt den Wert, der in der Ergebniszeile steht. "
+                   "Die Ergebniszeile selbst wird nicht angefasst - sie "
+                   "ist hier die Vorlage. „Wert aktuell LIMS“ ist der "
+                   "Stand am Anhang, „Wert neu“ der aus der "
+                   "Ergebnistabelle. Der bisherige Wert des Anhangs "
+                   "geht wie immer nach MW_OLD, und der Stand von jetzt "
+                   f"vorher in den Ordner „{trdfexport.ORDNER}“.")
+    elif zurueck:
+        hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
+                   "MW_ROH und MW, der Bearbeitungsstand, das "
+                   "Korrekturkennzeichen und FC8 - und am "
+                   "Teilprobenanhang MW und MW_OLD. Eine neue Sicherung "
+                   "entsteht dabei nicht: die Datei, die gerade gelesen "
+                   "wird, ist sie.")
+        allein = trdfexport.ohne_anhang(aenderungen)
+        if allein:
+            hinweis += (
+                f" ACHTUNG: {len(allein)} Rohwerte dieser Sicherung "
+                "tragen keine ROHW_ID - fuer sie wird nur die "
+                "Ergebniszeile zurueckgestellt, waehrend der "
+                "Teilprobenanhang auf dem korrigierten Wert stehen "
+                "bleibt. Danach rechnet das LIMS mit einer anderen "
+                "Zahl als der, die in der Ergebnistabelle steht; die "
+                "Pruefung meldet das als „Rohwert am Anhang weicht "
+                "ab“. Solche Sicherungen stammen aus einer aelteren "
+                "Fassung von LabControl.")
+        leer = trdfexport.geleert(aenderungen)
+        if leer:
+            hinweis += (f" Bei {len(leer)} Werten stand vor der "
+                        "Korrektur nichts - dort steht danach wieder "
+                        f"nichts („{trdf.MARKE}“ in der Spalte "
+                        "„Wert neu“).")
+    else:
+        hinweis = ("In ERGEBNISSE werden MW_ROH und MW mit demselben "
+                   f"Wert geschrieben, dazu FC8 = „{lims_db.TRDF_FC8}“, "
+                   "der Bearbeitungsstand und das Korrekturkennzeichen. "
+                   "Ein Rohwert haengt zusaetzlich am Teilprobenanhang - "
+                   "aus ihm rechnet das LIMS -, dort wird MW mitgesetzt "
+                   "und der bisherige Wert nach MW_OLD gehoben. Der "
+                   "Stand von jetzt geht vorher in den Ordner "
+                   f"„{trdfexport.ORDNER}“.")
+    mit_x = trdfexport.markiert(aenderungen)
+    leer = trdfexport.geleert(aenderungen)
+    if not zurueck and (mit_x or leer):
+        teile = []
+        if mit_x:
+            teile.append(f"{len(mit_x)} Werte bekommen ein „"
+                         f"{trdf.MARKE}“ (hier soll nichts stehen)")
+        if leer:
+            teile.append(f"{len(leer)} Werte werden geleert")
+        hinweis += (" " + " und ".join(teile) + " - so, wie es die "
+                    "Eingabemaske des LIMS beim Wechsel der Variante "
+                    "auch tut.")
+    if ohne:
+        hinweis += (f" {len(ohne)} Werte haben im LIMS keine "
+                    "Ergebniszeile - sie werden gemeldet und nicht "
+                    "angelegt.")
+    if wieder:
+        hinweis += (f" {len(wieder)} Zeilen tragen schon ein "
+                    "Korrekturkennzeichen: dort war bereits jemand.")
+    return hinweis
+
+
 class TrdfModell:
     """Eine Serie unter einer Untersuchungsmethode - Daten, Rechnung, Urteil.
 

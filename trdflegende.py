@@ -510,6 +510,8 @@ _FENSTER = ('Legendenfenster',)
 
 def __getattr__(name):
     if name in _FENSTER:
-        import trdflegendefenster
-        return getattr(trdflegendefenster, name)
+        # importlib, damit PyInstaller die Tk-Fenster nicht in die
+        # Web-exe packt.
+        import importlib
+        return getattr(importlib.import_module("trdflegendefenster"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
