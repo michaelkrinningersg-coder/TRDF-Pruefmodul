@@ -152,6 +152,16 @@ jobs:
           Write-Host "Oberflaeche laeuft nach 15 Sekunden noch - ok"
           Stop-Process -Id $proc.Id -Force
 
+      - name: Auskunft, falls das Fenster nicht startet
+        if: failure()
+        run: |
+          foreach ($pfad in @("dist\startfehler.txt", "dist\trdfweb.log")) {
+            if (Test-Path $pfad) { Write-Host "--- $pfad ---"; Get-Content $pfad }
+          }
+          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15)} -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error') } |
+            Select-Object -First 4 | ForEach-Object { Write-Host "--- $($_.ProviderName) ---"; Write-Host $_.Message }
+
       - name: Kennung des Stands bilden
         run: |
           $ref = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'

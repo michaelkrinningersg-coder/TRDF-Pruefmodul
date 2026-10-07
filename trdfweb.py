@@ -1243,8 +1243,58 @@ def selbsttest() -> int:
     return code
 
 
+def _protokoll_einrichten():
+    """pywebview schreibt, was beim Fenster geschieht, in eine Datei.
+
+    Ohne Konsole waere es sonst verloren - und gerade beim ersten Start
+    an einem neuen Arbeitsplatz ist es die einzige Auskunft.
+    """
+    import logging
+    try:
+        ziel = os.path.join(config.get_runtime_dir(), "trdfweb.log")
+        handler = logging.FileHandler(ziel, mode="w", encoding="utf-8")
+    except OSError:
+        return
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger = logging.getLogger("pywebview")
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+
+def _net_fehler_merken():
+    """Eine unbehandelte .NET-Ausnahme beendet das Programm ohne Python.
+
+    Sie kommt aus dem Fenster (WinForms/WebView2) und laeuft an Python
+    vorbei - der Prozess ist einfach weg. Hier wird sie vorher noch in
+    startfehler.txt geschrieben.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        __import__("clr")      # laedt die .NET-Laufzeit (pythonnet)
+        from System import AppDomain, UnhandledExceptionEventHandler
+
+        def merken(_sender, args):
+            try:
+                ziel = os.path.join(config.get_runtime_dir(),
+                                    "startfehler.txt")
+                with open(ziel, "w", encoding="utf-8") as datei:
+                    datei.write(str(args.ExceptionObject))
+            except OSError:
+                pass
+
+        AppDomain.CurrentDomain.UnhandledException += \
+            UnhandledExceptionEventHandler(merken)
+    except Exception:                                    # noqa: BLE001
+        traceback.print_exc()
+
+
 def fenster_starten(api: Api):
     import webview
+
+    _protokoll_einrichten()
+    _net_fehler_merken()
 
     seite = ressource(WEBORDNER, "index.html")
     fenster = webview.create_window(
