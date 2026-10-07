@@ -24,6 +24,7 @@
     onProbe = null,
     onZeile = null,
     onMeldung = null,
+    onSpalteVerschieben = null,
   } = $props();
 
   const PROBENSPALTEN = new Set(["Probe", "Probe-Nr."]);
@@ -626,6 +627,32 @@
     hinweis = null;
   }
 
+  // ------------------------------------------- Spalten am Kopf ziehen
+  let gezogen = $state(null);
+  let ueberKopf = $state(null);
+  function kopfZiehen(e, s) {
+    if (!onSpalteVerschieben || s.fest) {
+      e.preventDefault();
+      return;
+    }
+    kopfRaus();
+    gezogen = s.name;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", s.name);
+  }
+  function kopfUeber(e, s) {
+    if (!gezogen || s.fest || s.name === gezogen) return;
+    e.preventDefault();
+    ueberKopf = s.name;
+  }
+  function kopfAbgelegt(e, s) {
+    e.preventDefault();
+    const von = gezogen;
+    gezogen = null;
+    ueberKopf = null;
+    if (von && von !== s.name && !s.fest) onSpalteVerschieben(von, s.name);
+  }
+
   // Von aussen: die Tabelle bekommt den Fokus.
   export function fokus() {
     rumpf?.focus();
@@ -665,6 +692,15 @@
             class:aktiv={c === zeiger.c}
             style:width="{s.breite}px"
             style:left={s.fest ? `${links[c]}px` : null}
+            class:ziehbar={!!onSpalteVerschieben && !s.fest}
+            class:ziel={ueberKopf === s.name}
+            class:gezogen={gezogen === s.name}
+            draggable={!!onSpalteVerschieben && !s.fest}
+            ondragstart={(e) => kopfZiehen(e, s)}
+            ondragover={(e) => kopfUeber(e, s)}
+            ondragleave={() => ueberKopf === s.name && (ueberKopf = null)}
+            ondrop={(e) => kopfAbgelegt(e, s)}
+            ondragend={() => { gezogen = null; ueberKopf = null; }}
             onmouseenter={(e) => kopfRein(e, s)}
             onmouseleave={kopfRaus}
             role="columnheader"
@@ -810,6 +846,16 @@
   .kz.fest {
     position: sticky;
     z-index: 4;
+  }
+  .kz.ziehbar {
+    cursor: grab;
+  }
+  .kz.gezogen {
+    opacity: 0.45;
+  }
+  .kz.ziel {
+    box-shadow: inset 3px 0 0 var(--akzent);
+    background: var(--akzent-zart);
   }
 
   /* ------------------------------------------------------ Zeilen */

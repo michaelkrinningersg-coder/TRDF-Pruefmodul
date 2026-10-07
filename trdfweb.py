@@ -1058,6 +1058,56 @@ class Api:
             return voll
         return self._sicher(arbeit)
 
+    def spalte_verschieben(self, blatt: str, von: str, nach: str) -> dict:
+        """Eine Spalte am Kopf greifen und auf eine andere ziehen.
+
+        Dieselbe Ordnung wie in der Legende - gespeichert in den
+        Einstellungen. Feste Spalten bleiben, wo sie sind; ein Paar
+        ("TRDF LIMS", "TRDF ber.") wandert zusammen.
+        """
+        def arbeit():
+            s = self._s
+            titel = BLAETTER[blatt]
+            quellen = trdfpruefung.QUELLEN if blatt == "pruefung" else None
+            alle = (s._rohspalten()[3] if blatt == "roh"
+                    else s._ergebnisspalten()[4] if blatt == "ergebnis"
+                    else s._pruefspalten()[3])
+            reihenfolge = []
+            for name in alle:
+                kuerzel = trdflegende.schluessel(name, quellen)
+                if kuerzel not in reihenfolge:
+                    reihenfolge.append(kuerzel)
+            quelle = trdflegende.schluessel(von, quellen)
+            ziel = trdflegende.schluessel(nach, quellen)
+            _vorher, fest = s.spaltenordnung(titel)
+            if quelle == ziel or quelle not in reihenfolge \
+                    or ziel not in reihenfolge:
+                return {"stand": None}
+            if quelle in fest or ziel in fest:
+                return {"stand": _stand("Feste Spalten bleiben, wo sie sind "
+                                        "- unter \u201eInfo\u201c laesst "
+                                        "sich das \u201eja\u201c bei "
+                                        "\u201eFest\u201c wegnehmen.",
+                                        "warn")}
+            hinunter = reihenfolge.index(quelle) < reihenfolge.index(ziel)
+            reihenfolge.remove(quelle)
+            stelle = reihenfolge.index(ziel) + (1 if hinunter else 0)
+            reihenfolge.insert(stelle, quelle)
+            fehler = s.spalten_ablegen(titel, {}, {
+                "reihenfolge": reihenfolge,
+                "fest": [k for k in fest if k in reihenfolge],
+                "versteckt": [k for k in s.versteckt(titel)
+                              if k in reihenfolge],
+                "kopfspalte": s.kopfspalte(),
+                "kopfspalten": {k: w for k, w in s.kopfspalten().items()
+                                if k in reihenfolge}})
+            if fehler:
+                return {"stand": _stand(trdflegende.NICHT_GESPEICHERT.format(
+                    fehler), "fehler")}
+            return {"tafeln": s.tafeln(),
+                    "stand": _stand(f"Spalte {von} verschoben - gespeichert.")}
+        return self._sicher(arbeit)
+
     # ------------------------------------------------------- Einstellungen
     def einstellung(self, name: str, wert) -> dict:
         """Merkt sich eine Wahl der Seite - nur was die Seite selbst fuehrt."""

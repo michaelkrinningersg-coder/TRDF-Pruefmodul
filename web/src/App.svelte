@@ -373,6 +373,13 @@
     return antwort.stand;
   }
 
+  async function spalteVerschieben(blatt, wo, von, nach) {
+    const antwort = await rufe("spalte_verschieben", blatt, von, nach);
+    if (!fehlerFrei(antwort)) return;
+    if (antwort.tafeln && zustand) zustand.tafeln = antwort.tafeln;
+    if (antwort.stand) meldungZeile[wo] = antwort.stand;
+  }
+
   function berechneteUmschalten() {
     berechneteOffen = !berechneteOffen;
     rufe("einstellung", "trdf_berechnete", berechneteOffen ? "an" : "aus");
@@ -552,6 +559,7 @@
                   sehen={arbeitszeile}
                   zeilenhoehe={zeilenhoehe - 4}
                   onProbe={blockOeffnen}
+                  onSpalteVerschieben={(von, nach) => spalteVerschieben("ergebnis", "roh", von, nach)}
                 />
               </div>
             </div>
@@ -572,6 +580,7 @@
               onProbe={blockOeffnen}
               onZeile={(p) => (arbeitszeile = p)}
               onMeldung={rasterMeldung}
+              onSpalteVerschieben={(von, nach) => spalteVerschieben("roh", "roh", von, nach)}
             />
           </div>
         </div>
@@ -596,6 +605,7 @@
               sehen={arbeitszeile}
               {zeilenhoehe}
               onProbe={blockOeffnen}
+              onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
         </div>
@@ -626,6 +636,7 @@
               sehen={arbeitszeile}
               {zeilenhoehe}
               onProbe={blockOeffnen}
+              onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
         </div>

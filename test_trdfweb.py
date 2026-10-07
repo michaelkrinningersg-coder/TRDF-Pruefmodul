@@ -415,6 +415,29 @@ def test_legende_lesen_und_speichern():
     assert bruecke._s.beschreibungen()["GMSZ"] == "Masse Zylinder"
 
 
+def test_eine_spalte_am_kopf_verschieben():
+    bruecke, voll = geladen()
+    namen = [s["name"] for s in voll["tafeln"]["roh"]["spalten"]]
+    assert namen.index("VOLSZ") < namen.index("GMSZ")
+    antwort = bruecke.spalte_verschieben("roh", "VOLSZ", "GMSZ")
+    namen = [s["name"] for s in antwort["tafeln"]["roh"]["spalten"]]
+    assert namen.index("VOLSZ") == namen.index("GMSZ") + 1
+    # und es bleibt so - auch nach dem naechsten Abruf
+    assert bruecke._s.spaltenordnung("Rohwerte")[0].index("VOLSZ") > \
+        bruecke._s.spaltenordnung("Rohwerte")[0].index("GMSZ")
+
+
+def test_ein_paar_wandert_zusammen_und_feste_bleiben():
+    bruecke, voll = geladen()
+    antwort = bruecke.spalte_verschieben("ergebnis", "TRD_TRDF ber.",
+                                         "FBMSZ LIMS")
+    namen = [s["name"] for s in antwort["tafeln"]["ergebnis"]["spalten"]]
+    assert namen.index("TRD_TRDF LIMS") + 1 == namen.index("TRD_TRDF ber.")
+    assert namen.index("TRD_TRDF ber.") < namen.index("FBMSZ LIMS")
+    antwort = bruecke.spalte_verschieben("roh", "Probe", "GMSZ")
+    assert antwort["stand"]["art"] == "warn"
+
+
 def test_nur_bekannte_einstellungen():
     bruecke = api()
     assert bruecke.einstellung("trdf_berechnete", "an")["ok"]
