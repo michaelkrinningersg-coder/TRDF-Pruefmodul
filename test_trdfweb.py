@@ -505,6 +505,11 @@ def test_der_dienst_beantwortet_aufrufe():
     else:
         raise AssertionError("Der Dienst antwortet nicht")
     assert daten["datenbanken"] == ["LIMS"]
+    # Woran die Seite den Dienst erkennt - im Programm gibt es das nicht.
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{gefunden['port']}/api/bereit",
+            timeout=2) as antwort:
+        assert json.loads(antwort.read()) == {"dienst": True}
     anfrage = urllib.request.Request(
         f"http://127.0.0.1:{gefunden['port']}/api/_s", data=b"[]",
         method="POST")
@@ -546,6 +551,36 @@ def test_die_web_exe_packt_keine_tk_seite():
     for name in ("trdfreiter", "eingaberaster", "trdflegendefenster",
                  "test_trdfreiter"):
         assert name not in module, name
+
+
+def test_die_seite_unterscheidet_bruecke_und_dienst():
+    """pywebview liefert die Seite ueber http aus - "http" allein darf
+    nicht heissen, dass ueber den Entwicklungsdienst gerufen wird."""
+    ordner = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(ordner, "web", "src", "lib", "api.js"),
+              encoding="utf-8") as datei:
+        text = datei.read()
+    assert "pywebviewready" in text
+    assert "/api/bereit" in text
+
+
+def test_start_meldet_die_verbindung_im_protokoll():
+    import logging
+    gesehen = []
+
+    class Sammler(logging.Handler):
+        def emit(self, record):
+            gesehen.append(record.getMessage())
+
+    logger = logging.getLogger("trdfweb")
+    sammler = Sammler()
+    logger.addHandler(sammler)
+    logger.setLevel(logging.INFO)
+    try:
+        api().start()
+    finally:
+        logger.removeHandler(sammler)
+    assert trdfweb.SEITE_VERBUNDEN in gesehen
 
 
 def test_das_fenstersymbol_ist_unter_windows_eine_ico():

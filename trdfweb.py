@@ -32,6 +32,7 @@ import datetime as dt
 import decimal
 import importlib
 import json
+import logging
 import os
 import sys
 import threading
@@ -56,6 +57,9 @@ APP_VERSION = "v2.0"
 # Wo die gebaute Svelte-Seite liegt - im Quelltext neben dieser Datei,
 # in der exe im ausgepackten Ordner.
 WEBORDNER = "webdist"
+
+# Was im Protokoll steht, sobald die Seite Python erreicht hat.
+SEITE_VERBUNDEN = "Seite mit Python verbunden"
 
 # Das Fenstersymbol: unter Windows nur als .ico.
 SYMBOL_WINDOWS = "Icon.ico"
@@ -304,6 +308,11 @@ class Api:
     # ------------------------------------------------------------ Start
     def start(self) -> dict:
         """Was die Anmeldung zeigt - der gemerkte Benutzer, die Datenbank."""
+        # Steht im Protokoll: die Seite hat Python erreicht. Der Bau prueft
+        # genau diese Zeile - ein offenes Fenster allein heisst noch nicht,
+        # dass die Bruecke steht.
+        logging.getLogger("trdfweb").info(SEITE_VERBUNDEN)
+
         def arbeit():
             konfig = self._s._einstellungen()
             try:
@@ -1248,6 +1257,20 @@ def dienst(api: Api, port: int = 8765):
         def log_message(self, *args):
             pass
 
+        def do_GET(self):
+            if self.path.split("?")[0] == "/api/bereit":
+                # Woran die Seite erkennt, dass sie ueber HTTP rufen soll -
+                # im Programm liefert pywebview sie aus, und dort gibt es
+                # diese Adresse nicht.
+                antwort = json.dumps({"dienst": True}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(antwort)))
+                self.end_headers()
+                self.wfile.write(antwort)
+                return
+            super().do_GET()
+
         def do_POST(self):
             if not self.path.startswith("/api/"):
                 self.send_error(404)
@@ -1311,9 +1334,10 @@ def _protokoll_einrichten():
         return
     handler.setFormatter(logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s: %(message)s"))
-    logger = logging.getLogger("pywebview")
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+    for name in ("pywebview", "trdfweb"):
+        logger = logging.getLogger(name)
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
 
 
 def _net_fehler_merken():

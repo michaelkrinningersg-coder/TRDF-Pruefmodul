@@ -149,8 +149,14 @@ jobs:
           }
           $fenster = Get-Process -Id $proc.Id | Select-Object -ExpandProperty MainWindowTitle
           Write-Host "Fenstertitel: '$fenster'"
-          Write-Host "Oberflaeche laeuft nach 15 Sekunden noch - ok"
           Stop-Process -Id $proc.Id -Force
+          # Ein offenes Fenster heisst noch nicht, dass die Seite Python
+          # erreicht: trdfweb.log muss die Zeile der Bruecke tragen.
+          if (Test-Path "dist\trdfweb.log") { Get-Content "dist\trdfweb.log" }
+          if (-not (Select-String -Path "dist\trdfweb.log" -Pattern "Seite mit Python verbunden" -Quiet)) {
+            throw "Das Fenster ist offen, aber die Seite hat Python nicht erreicht"
+          }
+          Write-Host "Fenster offen und Seite mit Python verbunden - ok"
 
       - name: Auskunft, falls das Fenster nicht startet
         if: failure()
