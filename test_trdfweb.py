@@ -288,7 +288,8 @@ def test_die_legende_traegt_text_und_prozent_getrennt():
     for eintrag in daten["legende"] + daten["schaufellegende"]:
         assert eintrag["wert"].endswith("%")
         assert "%" not in eintrag["text"]
-    assert daten["legende"][0] == {"farbe": trdfblock.FARBEN["fein"],
+    assert daten["legende"][0] == {"marke": "fein",
+                                   "farbe": trdfblock.FARBEN["fein"],
                                    "text": "Feinboden", "wert": "75,0 %"}
 
 

@@ -96,6 +96,12 @@ SCHRIFTFARBE = {GROB_GROSS: "#ffffff", GROB_KLEIN: "#ffffff",
 # obere Zahl als die ganze Lage.
 SCHAUFELFOLGE = (FEINBODEN, GROB_FEINST, GROB_MITTEL, GROB_KLEIN)
 
+# In welcher Reihenfolge die Lagen in der Legende stehen - fuer Probe und
+# Schaufelprobe dieselbe, damit Feinboden neben Feinboden steht, 2 bis 63
+# mm neben 2 bis 63 mm und ueber 63 mm neben ueber 63 mm. Die beiden
+# Haelften der Lage 2 bis 63 mm gibt es nur in der Schaufelprobe.
+LEGENDENFOLGE = (FEINBODEN, GROB_KLEIN, GROB_MITTEL, GROB_FEINST, GROB_GROSS)
+
 # Die Formelkuerzel, aus denen das Bild entsteht.
 VARIANTE = "_TRDV"
 SKELETT = "_SKA"
@@ -326,8 +332,8 @@ def blockdaten(probe: str, roh: dict, gerechnet: dict) -> dict:
         bild.append(_lage(marke, unten / GANZ, anteil / GANZ,
                           prozent(anteil)))
         unten += anteil
-    legende = [{"farbe": FARBEN[marke], "text": BESCHRIFTUNG[marke],
-                "wert": prozent(anteil)}
+    legende = [{"marke": marke, "farbe": FARBEN[marke],
+                "text": BESCHRIFTUNG[marke], "wert": prozent(anteil)}
                for marke, anteil in lagen]
 
     teile = schaufel(roh, gerechnet)
@@ -368,11 +374,12 @@ def blockdaten(probe: str, roh: dict, gerechnet: dict) -> dict:
                       GROB_GROSS):
             if teile.get(marke):
                 schaufellegende.append({
-                    "farbe": FARBEN[marke],
+                    "marke": marke, "farbe": FARBEN[marke],
                     "text": BESCHRIFTUNG_SCHAUFEL[marke],
                     "wert": anteil_von(teile[marke], bezug)})
     return {
         "probe": probe, "variante": variante,
+        "legendenfolge": list(LEGENDENFOLGE),
         "dichte": dichtetext(gerechnet.get(DICHTE)),
         "vorrat": vorratstext(gerechnet.get(VORRAT)),
         "skelett": prozent(gerechnet.get(SKELETT)),

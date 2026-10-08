@@ -48,6 +48,16 @@
       onZu();
     }
   }
+  // Die Zeilen der Legende: je Lage eine, Probe und Schaufelprobe
+  // nebeneinander. Fehlt eine Lage auf einer Seite, bleibt ihr Platz leer.
+  let zeilen = $derived.by(() => {
+    const probe = Object.fromEntries(daten.legende.map((l) => [l.marke, l]));
+    const schaufel = Object.fromEntries(daten.schaufellegende.map((l) => [l.marke, l]));
+    return (daten.legendenfolge ?? [])
+      .filter((m) => probe[m] || schaufel[m])
+      .map((m) => [probe[m] ?? null, schaufel[m] ?? null]);
+  });
+
   function lage(l, hoehe) {
     const h = l.hoehe * hoehe;
     return { y: hoehe - (l.unten + l.hoehe) * hoehe, h };
@@ -139,21 +149,26 @@
     {/if}
   </div>
 
-  <!-- Je Lage eine Zeile, die Prozente rechtsbuendig untereinander. -->
-  <div class="legenden">
-    {#each [["Probe", daten.legende], ["Schaufelprobe", daten.schaufellegende]] as [titel, zeilen]}
-      {#if zeilen.length}
-        <div class="legende">
-          <div class="klein">{titel}</div>
-          {#each zeilen as l}
+  <!-- Je Lage eine Zeile, die Prozente rechtsbuendig untereinander - und
+       Probe und Schaufelprobe in derselben Zeile fuer dieselbe Lage. -->
+  {#if zeilen.length}
+    <div class="legenden" class:mit-schaufel={daten.schaufellegende.length}>
+      <div class="klein kopf">Probe</div>
+      {#if daten.schaufellegende.length}<span></span><div class="klein kopf">Schaufelprobe</div>{/if}
+      {#each zeilen as [probe, schaufel]}
+        {#each daten.schaufellegende.length ? [probe, schaufel] : [probe] as l, seite}
+          {#if seite === 1}<span></span>{/if}
+          {#if l}
             <i style:background={l.farbe}></i>
             <span class="text">{l.text}</span>
             <span class="prozent">{l.wert}</span>
-          {/each}
-        </div>
-      {/if}
-    {/each}
-  </div>
+          {:else}
+            <i class="leer"></i><span></span><span></span>
+          {/if}
+        {/each}
+      {/each}
+    </div>
+  {/if}
   <footer>Von unten nach oben: Feinboden, gewogener Grobboden, geschätzter Grobboden. Über der gestrichelten Linie: was größer als 63 mm war. ↑/↓ blättert.</footer>
 </section>
 
@@ -282,32 +297,35 @@
   }
   .legenden {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-    padding: 4px 16px 4px;
-  }
-  .legende {
-    display: grid;
-    grid-template-columns: 11px 1fr auto;
+    grid-template-columns: 11px max-content max-content;
+    justify-content: start;
     column-gap: 8px;
     row-gap: 3px;
     align-items: center;
+    padding: 4px 16px 4px;
     font-size: 12px;
   }
-  .legende .klein {
-    grid-column: 1 / -1;
+  .legenden.mit-schaufel {
+    grid-template-columns: 11px 1fr auto 10px 11px 1fr auto;
+    justify-content: stretch;
   }
-  .legende i {
+  .legenden .kopf {
+    grid-column: span 3;
+  }
+  .legenden i {
     width: 11px;
     height: 11px;
     border-radius: 2px;
   }
-  .legende .text {
+  .legenden i.leer {
+    visibility: hidden;
+  }
+  .legenden .text {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .legende .prozent {
+  .legenden .prozent {
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-weight: 600;

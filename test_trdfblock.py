@@ -325,6 +325,34 @@ def test_ohne_masse_der_schaufelprobe_keine_schaufelspalte():
     mit_fenster(pruefen)
 
 
+def test_dieselbe_lage_steht_in_derselben_zeile():
+    """Feinboden neben Feinboden, 2-63 neben 2-63, >63 neben >63 - auch
+    wenn die Schaufelprobe zwei Zeilen mehr hat (ihre Haelften der Lage
+    2 bis 63 mm)."""
+    def zeile_von(rahmen, anfang):
+        for kind in rahmen.grid_slaves():
+            if isinstance(kind, tk.Label) and \
+                    str(kind.cget("text")).startswith(anfang):
+                return int(kind.grid_info()["row"])
+        return None
+
+    def pruefen(eltern):
+        for probe, roh, lnr in (("26B0005", ROH5, 5), ("26B0033", ROH33, 33)):
+            block = trdfblock.zeigen(eltern, probe, roh,
+                                     test_trdf.gerechnet(lnr))
+            for anfang in ("Feinboden", "Grobboden 2 - 63 mm",
+                           "Grobboden > 63 mm"):
+                links = zeile_von(block.legende, anfang)
+                rechts = zeile_von(block.schaufellegende, anfang)
+                if links is None or rechts is None:
+                    continue                  # Lage nur auf einer Seite
+                assert links == rechts, (probe, anfang)
+        # 26B0033: die Schaufelprobe hat mehr Zeilen als die Probe.
+        assert len(_legendenzeilen(block.schaufellegende)) > \
+            len(_legendenzeilen(block.legende))
+    mit_fenster(pruefen)
+
+
 def test_die_prozente_der_legende_stehen_rechtsbuendig():
     def pruefen(eltern):
         block = trdfblock.zeigen(eltern, "26B0005", ROH5,
@@ -432,7 +460,8 @@ def _legendenzeilen(rahmen) -> list:
             zeilen.setdefault(int(info["row"]), {})[int(info["column"])] = \
                 kind.cget("text")
     return [": ".join(teile[spalte] for spalte in sorted(teile))
-            for _zeile, teile in sorted(zeilen.items())]
+            for _zeile, teile in sorted(zeilen.items())
+            if any(teile.values())]
 
 
 def _alle_texte(rahmen) -> list:
