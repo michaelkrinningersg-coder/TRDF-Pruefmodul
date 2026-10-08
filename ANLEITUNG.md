@@ -94,8 +94,9 @@ Wird eine Variante mit Strg+Shift+D nach unten kopiert, wirkt sie in jeder Zeile
 
 Ein **Klick auf die Probennummer** öffnet den Block der Probe als eigenes Fenster.
 * Links die Probe im Boden: Feinboden, gewogener Grobboden 2–63 mm, geschätzter Grobboden > 63 mm.
-* Rechts die Schaufelprobe nach Volumen.
+* Rechts die Schaufelprobe nach Volumen – nur, wenn ihre Masse weder 0 noch `x` ist.
 * In der Mitte die Zahlen, aus denen gerechnet wird.
+* Darunter die Legende: je Lage eine Zeile, die Prozente untereinander. Dieselbe Lage steht bei Probe und Schaufelprobe in derselben Zeile.
 
 Der Block **rechnet bei jeder Eingabe live mit**. **Pfeil hoch/runter** blättert zur nächsten Probe.
 
@@ -183,5 +184,6 @@ Darüber stehen Serie, Zeitpunkt, Anzahl und der Pfad der Sicherung. **Bericht a
 
   Gespeichert wird in `einstellungen\` neben der exe; beim nächsten Start ist alles wieder da. Ebenso gemerkt werden die zuletzt abgefragte Serie und ob die berechneten Größen aufgeklappt sind.
 
+* **Variante x ausblenden** (in Rohwerte, Ergebnisse und Pruefung, von Haus aus aus) lässt die Proben weg, deren Variante `x` ist. Das betrifft nur die Anzeige – beim Export werden auch Änderungen an ausgeblendeten Proben geschrieben.
 * Die blauen **i** erklären, was eine Tabelle zeigt; das graue **i** listet die Tastenkürzel.
 * Als CSV ablegen lassen sich **Rohwertblatt**, **Aenderungen**, **Ergebnisblatt**, das **Blatt** im Reiter Pruefung und der **Bericht**. Ablage im Ordner `TRDF-Pruefung` bzw. `trdf_backup` neben der exe.

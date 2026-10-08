@@ -98,6 +98,12 @@ SCHRIFTFARBE = {GROB_GROSS: "#ffffff", GROB_KLEIN: "#ffffff",
 # obere Zahl als die ganze Lage.
 SCHAUFELFOLGE = (FEINBODEN, GROB_FEINST, GROB_MITTEL, GROB_KLEIN)
 
+# In welcher Reihenfolge die Lagen in der Legende stehen - fuer Probe und
+# Schaufelprobe dieselbe, damit Feinboden neben Feinboden steht, 2 bis 63
+# mm neben 2 bis 63 mm und ueber 63 mm neben ueber 63 mm. Die beiden
+# Haelften der Lage 2 bis 63 mm gibt es nur in der Schaufelprobe.
+LEGENDENFOLGE = (FEINBODEN, GROB_KLEIN, GROB_MITTEL, GROB_FEINST, GROB_GROSS)
+
 # Die Formelkuerzel, aus denen das Bild entsteht.
 VARIANTE = "_TRDV"
 SKELETT = "_SKA"
@@ -213,6 +219,12 @@ def schaufel(roh: dict, gerechnet: dict) -> dict:
     Schaufelprobe oder die Trockenrohdichte, und ein Verhaeltnis ohne
     seinen groessten Teil waere eine Falschauskunft.
     """
+    # Ohne gewogene Schaufelprobe gibt es keine - auch wenn aus anderen
+    # Werten ein Feinboden zu rechnen waere. Eine Masse 0 oder x heisst:
+    # diese Probe wurde nicht mit der Schaufel genommen.
+    masse_schaufel = _zahl(roh.get(MASSE_SCHAUFEL))
+    if masse_schaufel is None or masse_schaufel <= 0:
+        return {}
     fein = _teilen(gerechnet.get(FEIN_SCHAUFEL), gerechnet.get(DICHTE))
     dichte = roh.get(DICHTE_GB)
     klein = _teilen(roh.get(GROBBODEN_263), dichte)
@@ -377,11 +389,6 @@ class Blockfenster(tk.Toplevel):
                               bg=Style.CARD, highlightthickness=1,
                               highlightbackground=Style.BORDER)
         self.bild.pack(anchor="w")
-        # Die Anteile stehen unter ihrem eigenen Block. Nebeneinander in
-        # einer Spalte waeren es zwei Listen, und man muesste raten,
-        # welche zu welchem Bild gehoert.
-        self.legende = tk.Frame(links, bg=Style.BG)
-        self.legende.pack(fill="x", pady=(6, 0), anchor="w")
 
         daneben = tk.Frame(mitte, bg=Style.BG)
         daneben.pack(side="left", fill="y", padx=(18, 0), anchor="n")
@@ -399,7 +406,9 @@ class Blockfenster(tk.Toplevel):
         self.zahlen = tk.Frame(daneben, bg=Style.BG)
         self.zahlen.pack(fill="x", pady=(10, 0))
 
-        rechts = tk.Frame(mitte, bg=Style.BG)
+        # Die Schaufelprobe steht nur da, wenn sie gewogen wurde - ohne
+        # Masse (0 oder x) faellt die ganze Spalte weg.
+        self.rechts = rechts = tk.Frame(mitte, bg=Style.BG)
         rechts.pack(side="left", anchor="n", padx=(18, 0))
         tk.Label(rechts, text="Schaufelprobe", bg=Style.BG, fg=Style.MUTED,
                  font=Style.font(9), anchor="w").pack(fill="x")
@@ -408,8 +417,15 @@ class Blockfenster(tk.Toplevel):
                                       highlightthickness=1,
                                       highlightbackground=Style.BORDER)
         self.schaufelbild.pack(anchor="w")
-        self.schaufellegende = tk.Frame(rechts, bg=Style.BG)
-        self.schaufellegende.pack(fill="x", pady=(6, 0), anchor="w")
+
+        # Die Legenden unter beiden Bildern, nebeneinander: je Lage eine
+        # Zeile, die Prozente rechtsbuendig untereinander.
+        legenden = tk.Frame(self, bg=Style.BG)
+        legenden.pack(fill="x", padx=RAND, pady=(10, 0))
+        self.legende = tk.Frame(legenden, bg=Style.BG)
+        self.legende.pack(side="left", anchor="n")
+        self.schaufellegende = tk.Frame(legenden, bg=Style.BG)
+        self.schaufellegende.pack(side="left", anchor="n", padx=(28, 0))
 
         tk.Frame(self, bg=Style.BG, height=RAND).pack(fill="x")
         self._stellen(lagen, dichte, variante, skelett, vorrat, roh or {},
@@ -496,11 +512,10 @@ class Blockfenster(tk.Toplevel):
         self.schaufelbild.delete("all")
         teile = self.schaufelteile
         if not teile:
-            self.schaufelbild.create_text(
-                BREITE_SCHAUFEL / 2, HOEHE / 2,
-                text="keine\nSchaufelprobe", fill=Style.MUTED,
-                font=Style.font(9), justify="center")
+            self.rechts.pack_forget()
             return
+        if not self.rechts.winfo_manager():
+            self.rechts.pack(side="left", anchor="n", padx=(18, 0))
         bezug = teile["bezug"]
         gesamt = bezug + teile.get(GROB_GROSS, D(0))
         skala = float(HOEHE) / float(gesamt) if gesamt > 0 else 0.0
@@ -575,36 +590,60 @@ class Blockfenster(tk.Toplevel):
                          font=Style.font(9), anchor="w").pack(side="left")
 
     def _legende_zeichnen(self):
-        """Was welche Farbe bedeutet - nur die Lagen, die vorkommen."""
+        """Was welche Farbe bedeutet - nur die Lagen, die vorkommen.
+
+        Probe und Schaufelprobe stehen nebeneinander, und dieselbe Lage
+        steht in derselben Zeile: Feinboden neben Feinboden, 2 bis 63 mm
+        neben 2 bis 63 mm, ueber 63 mm neben ueber 63 mm. Fehlt eine Lage
+        auf einer Seite, bleibt dort die Zeile leer. Die beiden Haelften
+        der Lage 2 bis 63 mm gibt es nur in der Schaufelprobe.
+        """
         for rahmen in (self.legende, self.schaufellegende):
             for kind in rahmen.winfo_children():
                 kind.destroy()
-        for marke, anteil in self.lagen:
-            self._legendenzeile(self.legende, marke,
-                                f"{BESCHRIFTUNG[marke]}: {prozent(anteil)}")
+        probe = {marke: (BESCHRIFTUNG[marke], prozent(anteil))
+                 for marke, anteil in self.lagen}
         teile = self.schaufelteile
-        if not teile:
-            return
-        # Unter dem Bild stehen beide Haelften der Lage 2 bis 63 mm:
-        # im Block traegt sie eine Zahl, hier ist Platz fuer die
-        # Aufteilung, um die es beim Sieben ging.
-        for marke in (FEINBODEN, GROB_KLEIN, GROB_MITTEL, GROB_FEINST,
-                      GROB_GROSS):
-            if not teile.get(marke):
+        schaufel = {marke: (BESCHRIFTUNG_SCHAUFEL[marke],
+                            anteil_von(teile[marke], teile["bezug"]))
+                    for marke in LEGENDENFOLGE if teile and teile.get(marke)}
+        seiten = [(self.legende, "Probe", probe)]
+        if schaufel:
+            seiten.append((self.schaufellegende, "Schaufelprobe", schaufel))
+        folge = [marke for marke in LEGENDENFOLGE
+                 if any(marke in eintraege for _r, _t, eintraege in seiten)]
+        for rahmen, titel, eintraege in seiten:
+            if not eintraege:
                 continue
-            self._legendenzeile(
-                self.schaufellegende, marke,
-                f"{BESCHRIFTUNG_SCHAUFEL[marke]}: "
-                f"{anteil_von(teile[marke], teile['bezug'])}")
+            self._legendenkopf(rahmen, titel)
+            for zeile, marke in enumerate(folge, start=1):
+                if marke in eintraege:
+                    self._legendenzeile(rahmen, marke, *eintraege[marke],
+                                        zeile=zeile)
+                else:
+                    # Platzhalter: haelt die Zeile so hoch wie nebenan.
+                    tk.Label(rahmen, text="", bg=Style.BG,
+                             font=Style.font(9)).grid(row=zeile, column=1)
 
     @staticmethod
-    def _legendenzeile(rahmen, marke, text):
-        zeile = tk.Frame(rahmen, bg=Style.BG)
-        zeile.pack(fill="x", pady=1)
-        tk.Frame(zeile, bg=FARBEN[marke], width=14, height=14).pack(
-            side="left", pady=2)
-        tk.Label(zeile, text=f"  {text}", bg=Style.BG, fg=Style.TEXT,
-                 font=Style.font(9), anchor="w").pack(side="left")
+    def _legendenkopf(rahmen, titel):
+        tk.Label(rahmen, text=titel, bg=Style.BG, fg=Style.MUTED,
+                 font=Style.font(9), anchor="w").grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 2))
+
+    @staticmethod
+    def _legendenzeile(rahmen, marke, text, wert, zeile=None):
+        """Eine Zeile: Farbe, Name, Prozent - der Prozent rechtsbuendig."""
+        if zeile is None:
+            zeile = rahmen.grid_size()[1]
+        tk.Frame(rahmen, bg=FARBEN[marke], width=12, height=12).grid(
+            row=zeile, column=0, sticky="w", pady=1)
+        tk.Label(rahmen, text=text, bg=Style.BG, fg=Style.TEXT,
+                 font=Style.font(9), anchor="w").grid(
+            row=zeile, column=1, sticky="w", padx=(6, 12))
+        tk.Label(rahmen, text=wert, bg=Style.BG, fg=Style.TEXT,
+                 font=Style.font(9, "bold"), anchor="e").grid(
+            row=zeile, column=2, sticky="e")
 
 
 def zeigen(eltern, probe: str, roh: dict, gerechnet: dict,

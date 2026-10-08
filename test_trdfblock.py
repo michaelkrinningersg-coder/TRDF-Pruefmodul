@@ -301,10 +301,70 @@ def test_der_schaufelblock_zeichnet_seine_lagen():
         assert zahlen == ["83,9 %", "16,1 %"]
         # Unter dem Bild steht die Aufteilung, um die es beim Sieben
         # ging: die ganze Lage und ihre beiden Haelften.
-        legende = _alle_texte(block.schaufellegende)
+        legende = _legendenzeilen(block.schaufellegende)
         assert any("2 - 63 mm: 16,1 %" in text for text in legende)
         assert any("6,3 - 63 mm: 11,1 %" in text for text in legende)
         assert any("2 - 6,3 mm: 5,0 %" in text for text in legende)
+    mit_fenster(pruefen)
+
+
+def test_ohne_masse_der_schaufelprobe_keine_schaufelspalte():
+    """Masse 0 oder x: die Probe wurde nicht mit der Schaufel genommen -
+    dann steht auch kein Schaufelbild da, und keine Legende dazu."""
+    def pruefen(eltern):
+        ohne = dict(ROH33, MSchaufel="x")
+        block = trdfblock.zeigen(eltern, "26B0033", ohne,
+                                 test_trdf.gerechnet(33))
+        block.update_idletasks()
+        assert not block.rechts.winfo_manager()
+        assert _legendenzeilen(block.schaufellegende) == []
+        block.neu_zeichnen(ROH33, test_trdf.gerechnet(33))
+        block.update_idletasks()
+        assert block.rechts.winfo_manager() == "pack"
+        assert _legendenzeilen(block.schaufellegende)
+    mit_fenster(pruefen)
+
+
+def test_dieselbe_lage_steht_in_derselben_zeile():
+    """Feinboden neben Feinboden, 2-63 neben 2-63, >63 neben >63 - auch
+    wenn die Schaufelprobe zwei Zeilen mehr hat (ihre Haelften der Lage
+    2 bis 63 mm)."""
+    def zeile_von(rahmen, anfang):
+        for kind in rahmen.grid_slaves():
+            if isinstance(kind, tk.Label) and \
+                    str(kind.cget("text")).startswith(anfang):
+                return int(kind.grid_info()["row"])
+        return None
+
+    def pruefen(eltern):
+        for probe, roh, lnr in (("26B0005", ROH5, 5), ("26B0033", ROH33, 33)):
+            block = trdfblock.zeigen(eltern, probe, roh,
+                                     test_trdf.gerechnet(lnr))
+            for anfang in ("Feinboden", "Grobboden 2 - 63 mm",
+                           "Grobboden > 63 mm"):
+                links = zeile_von(block.legende, anfang)
+                rechts = zeile_von(block.schaufellegende, anfang)
+                if links is None or rechts is None:
+                    continue                  # Lage nur auf einer Seite
+                assert links == rechts, (probe, anfang)
+        # 26B0033: die Schaufelprobe hat mehr Zeilen als die Probe.
+        assert len(_legendenzeilen(block.schaufellegende)) > \
+            len(_legendenzeilen(block.legende))
+    mit_fenster(pruefen)
+
+
+def test_die_prozente_der_legende_stehen_rechtsbuendig():
+    def pruefen(eltern):
+        block = trdfblock.zeigen(eltern, "26B0005", ROH5,
+                                 test_trdf.gerechnet(5))
+        for rahmen in (block.legende, block.schaufellegende):
+            prozente = [k for k in rahmen.grid_slaves()
+                        if isinstance(k, tk.Label)
+                        and int(k.grid_info()["column"]) == 2]
+            assert prozente
+            for feld in prozente:
+                assert feld.grid_info()["sticky"] == "e"
+                assert feld.cget("text").endswith("%")
     mit_fenster(pruefen)
 
 
@@ -331,7 +391,7 @@ def test_die_linie_kommt_ohne_beschriftung_aus():
         texte = [flaeche.itemcget(k, "text") for k in flaeche.find_all()
                  if flaeche.type(k) == "text"]
         assert "100 %" not in texte
-        legende = _alle_texte(block.schaufellegende)
+        legende = _legendenzeilen(block.schaufellegende)
         assert any("obendrauf" in text for text in legende)
     mit_fenster(pruefen)
 
@@ -385,6 +445,23 @@ def test_eine_aenderung_geht_durch_beide_bloecke():
         assert block.schaufelteile[KLEIN] == vorher * 2
         assert "2509,02 g" in _alle_texte(block.zahlen)
     mit_fenster(pruefen)
+
+
+def _legendenzeilen(rahmen) -> list:
+    """Die Legende Zeile fuer Zeile als "Name: Prozent".
+
+    Name und Prozent stehen in eigenen Spalten, damit die Prozente
+    untereinander stehen - gelesen wird hier wieder eine Zeile daraus.
+    """
+    zeilen = {}
+    for kind in rahmen.grid_slaves():
+        if isinstance(kind, tk.Label):
+            info = kind.grid_info()
+            zeilen.setdefault(int(info["row"]), {})[int(info["column"])] = \
+                kind.cget("text")
+    return [": ".join(teile[spalte] for spalte in sorted(teile))
+            for _zeile, teile in sorted(zeilen.items())
+            if any(teile.values())]
 
 
 def _alle_texte(rahmen) -> list:

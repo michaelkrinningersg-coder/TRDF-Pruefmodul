@@ -165,6 +165,7 @@ BERECHNETE_AN = "an"
 BERECHNETE_AUS = "aus"
 BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen"
 EINFUEGEN_TEXT = "UM einfuegen ..."
+OHNE_X_TEXT = "Variante x ausblenden"
 BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
@@ -586,6 +587,11 @@ class TrdfSeite(tk.Frame):
             text="nur Eintraege mit Bewertung",
             command=self._rohwerte_zeigen)
         self.schalter_rohbefunde.pack(side="left", padx=(14, 0))
+        # Ein Schalter fuer alle drei Reiter: wer die Proben ohne Variante
+        # ausblendet, will sie nirgends sehen.
+        self.v_ohne_x = tk.BooleanVar(value=False)
+        self.schalter_ohne_x = []
+        self._schalter_ohne_x(leiste)
         ToolTip(self.schalter_rohbefunde,
                 "Zeigt nur die Proben, zu deren Rohwerten etwas zu\n"
                 "sagen ist. Gerechnet und geschrieben wird weiter\n"
@@ -688,6 +694,24 @@ class TrdfSeite(tk.Frame):
         # nachgezogen.
         self.rohtabellen = [self.rohtabelle]
 
+    def _schalter_ohne_x(self, leiste, before=None):
+        """"Variante x ausblenden" - in jedem Reiter derselbe Schalter.
+
+        Von Haus aus aus. Nur die Anzeige: gerechnet, geprueft und in das
+        LIMS geschrieben wird weiter ueber die ganze Serie.
+        """
+        schalter = ttk.Checkbutton(leiste, variable=self.v_ohne_x,
+                                   text=OHNE_X_TEXT, command=self._zeigen)
+        schalter.pack(side="left", padx=(14, 0),
+                      **({"before": before} if before is not None else {}))
+        ToolTip(schalter,
+                "Blendet die Proben aus, deren Variante x ist - in\n"
+                "Rohwerten, Ergebnissen und Pruefung zugleich.\n"
+                "Geschrieben werden sie trotzdem: der Export nimmt\n"
+                "jede Aenderung, auch die einer ausgeblendeten Probe.")
+        self.schalter_ohne_x.append(schalter)
+        return schalter
+
     def _ergebnis_reiter(self):
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Ergebnisse ")
@@ -706,6 +730,7 @@ class TrdfSeite(tk.Frame):
             "Groessen es sind. Rot heisst, dass der Wert von "
             "Hand bewegt wurde."))
         self.info_ergebnis.pack(side="left", padx=(10, 0))
+        self._schalter_ohne_x(leiste, before=self.info_ergebnis)
         self.ergebnistabelle = eingaberaster.Eingaberaster(
             seite, hoehe=16, bei_klick=self._block_zeigen,
             schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
@@ -737,6 +762,7 @@ class TrdfSeite(tk.Frame):
             text="nur Eintraege mit Bewertung",
             command=self._pruefung_zeigen)
         self.schalter_befunde.pack(side="left", padx=(14, 0))
+        self._schalter_ohne_x(leiste)
         ToolTip(self.schalter_befunde,
                 "Zeigt nur die Proben, zu denen etwas zu sagen ist.\n"
                 "Gerechnet und geschrieben wird weiter ueber die ganze\n"
@@ -2129,6 +2155,23 @@ class TrdfSeite(tk.Frame):
             self._veraltet[self.pruefungstabelle] = \
                 lambda _tabelle: self._pruefung_zeigen()
 
+    def variante_x(self, probe: str) -> bool:
+        """Steht in der Variante ein x - "diese Teilprobe hat keine"?
+
+        Solche Proben lassen sich ausblenden. Geschrieben werden sie
+        trotzdem: der Export fragt nicht, was zu sehen ist.
+        """
+        return str(self.rohwert(probe, trdfrohpruefung.VARIANTE)
+                   or "").strip().lower() == trdf.MARKE
+
+    def _ohne_x(self, zeilen) -> list:
+        """Die Zeilen ohne Proben mit Variante x - wenn der Schalter an ist."""
+        schalter = getattr(self, "v_ohne_x", None)
+        if schalter is None or not schalter.get():
+            return zeilen
+        return [(kennung, werte) for kennung, werte in zeilen
+                if not self.variante_x(kennung)]
+
     def rohsatz(self, probe: str) -> dict:
         """Die Rohwerte einer Probe, so wie gerade gerechnet wird."""
         return {kuerzel: self.rohwert(probe, kuerzel)
@@ -2248,6 +2291,7 @@ class TrdfSeite(tk.Frame):
             # geschrieben wird weiter ueber die ganze Serie.
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if werte.get(BEWERTUNGSSPALTE)]
+        zeilen = self._ohne_x(zeilen)
         for tabelle in self.rohtabellen:
             tabelle.fuellen(
                 spalten, zeilen, aenderbar=self.rohliste, marken=marken,
@@ -2260,7 +2304,7 @@ class TrdfSeite(tk.Frame):
             satz = (f"{gesamt - auffaellig} von {gesamt} Proben mit "
                     f"sauberen Rohwerten"
                     + (f"  |  {auffaellig} zu pruefen" if auffaellig else ""))
-            if self.v_nur_rohbefunde.get():
+            if len(zeilen) < gesamt:
                 satz += f"  |  {gesamt - len(zeilen)} ausgeblendet"
             self._rohmelden(satz,
                             Style.WARN if auffaellig else Style.TEXT)
@@ -2357,6 +2401,9 @@ class TrdfSeite(tk.Frame):
             if auseinander:
                 marken[(probe, BEWERTUNGSSPALTE)] = "abweichung"
             zeilen.append((probe, werte))
+        alle_zeilen = len(zeilen)
+        zeilen = self._ohne_x(zeilen)
+
         def auftrag(tabelle):
             tabelle.zellhinweise(self.aufschlusshinweis)
             tabelle.fuellen(
@@ -2372,7 +2419,9 @@ class TrdfSeite(tk.Frame):
             self._melden(
                 f"{gesamt - abweichungen} von {gesamt} Werten stimmen"
                 + (f"  |  {abweichungen} Abweichungen" if abweichungen
-                   else ""),
+                   else "")
+                + (f"  |  {alle_zeilen - len(zeilen)} Proben ausgeblendet"
+                   if len(zeilen) < alle_zeilen else ""),
                 Style.WARN if abweichungen else Style.TEXT)
 
     def _pruefspalten(self) -> tuple:
@@ -2425,6 +2474,8 @@ class TrdfSeite(tk.Frame):
                           if probe["bewertung"]}
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if kennung in mit_befund]
+        zeilen = self._ohne_x(zeilen)
+
         def auftrag(tabelle):
             tabelle.zellhinweise(self.aufschlusshinweis)
             tabelle.fuellen(
@@ -2438,7 +2489,7 @@ class TrdfSeite(tk.Frame):
         if gesamt:
             satz = (f"{gesamt - auffaellig} von {gesamt} Proben ohne Befund"
                     + (f"  |  {auffaellig} zu pruefen" if auffaellig else ""))
-            if self.v_nur_befunde.get():
+            if len(zeilen) < gesamt:
                 satz += f"  |  {gesamt - len(zeilen)} ausgeblendet"
             self._pruefmelden(satz, Style.WARN if auffaellig else Style.TEXT)
 

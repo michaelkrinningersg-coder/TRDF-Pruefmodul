@@ -1040,6 +1040,30 @@ def test_der_schalter_zeigt_nur_die_proben_mit_befund():
     mit_fenster(pruefen)
 
 
+def test_variante_x_laesst_sich_ausblenden_und_wird_trotzdem_geschrieben():
+    """Ein Schalter fuer alle drei Reiter, von Haus aus aus. Nur die
+    Anzeige: was an einer ausgeblendeten Probe geaendert ist, geht mit
+    in den Export."""
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        assert not blatt.v_ohne_x.get()
+        assert len(blatt.schalter_ohne_x) == 3
+        blatt._von_hand_geaendert("26B0011", "_TRDV", "x")
+        assert blatt.variante_x("26B0011")
+        blatt.v_ohne_x.set(True)
+        blatt._zeigen()
+        assert blatt.rohtabelle.zeilen() == ["26B0005"]
+        assert blatt.ergebnistabelle.zeilen() == ["26B0005"]
+        assert blatt.pruefungstabelle.zeilen() == ["26B0005"]
+        assert "1 ausgeblendet" in blatt.rohstand.cget("text")
+        assert "1 Proben ausgeblendet" in blatt.stand.cget("text")
+        assert any(eine["probe"] == "26B0011" for eine in blatt.aenderungen())
+        blatt.v_ohne_x.set(False)
+        blatt._zeigen()
+        assert len(blatt.rohtabelle.zeilen()) == 2
+    mit_fenster(pruefen)
+
+
 def test_das_blatt_als_csv_bleibt_vollstaendig():
     """Es ist der Nachweis ueber die Serie, nicht ueber ihre
     Auffaelligkeiten."""
