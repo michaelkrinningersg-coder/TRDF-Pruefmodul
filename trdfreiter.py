@@ -105,6 +105,7 @@ BERECHNETE_AN = "an"
 BERECHNETE_AUS = "aus"
 BERECHNETE_EIN_TEXT = "\u25b8 Berechnete Groessen"
 EINFUEGEN_TEXT = "UM einfuegen ..."
+OHNE_X_TEXT = "Variante x ausblenden"
 BERECHNETE_AUS_TEXT = "\u25be Berechnete Groessen"
 
 # Die Grossansicht der Rohwerte: eine Zeile doppelt so hoch wie im
@@ -369,6 +370,11 @@ class TrdfSeite(tk.Frame, TrdfModell):
             text="nur Eintraege mit Bewertung",
             command=self._rohwerte_zeigen)
         self.schalter_rohbefunde.pack(side="left", padx=(14, 0))
+        # Ein Schalter fuer alle drei Reiter: wer die Proben ohne Variante
+        # ausblendet, will sie nirgends sehen.
+        self.v_ohne_x = tk.BooleanVar(value=False)
+        self.schalter_ohne_x = []
+        self._schalter_ohne_x(leiste)
         ToolTip(self.schalter_rohbefunde,
                 "Zeigt nur die Proben, zu deren Rohwerten etwas zu\n"
                 "sagen ist. Gerechnet und geschrieben wird weiter\n"
@@ -471,6 +477,24 @@ class TrdfSeite(tk.Frame, TrdfModell):
         # nachgezogen.
         self.rohtabellen = [self.rohtabelle]
 
+    def _schalter_ohne_x(self, leiste, before=None):
+        """"Variante x ausblenden" - in jedem Reiter derselbe Schalter.
+
+        Von Haus aus aus. Nur die Anzeige: gerechnet, geprueft und in das
+        LIMS geschrieben wird weiter ueber die ganze Serie.
+        """
+        schalter = ttk.Checkbutton(leiste, variable=self.v_ohne_x,
+                                   text=OHNE_X_TEXT, command=self._zeigen)
+        schalter.pack(side="left", padx=(14, 0),
+                      **({"before": before} if before is not None else {}))
+        ToolTip(schalter,
+                "Blendet die Proben aus, deren Variante x ist - in\n"
+                "Rohwerten, Ergebnissen und Pruefung zugleich.\n"
+                "Geschrieben werden sie trotzdem: der Export nimmt\n"
+                "jede Aenderung, auch die einer ausgeblendeten Probe.")
+        self.schalter_ohne_x.append(schalter)
+        return schalter
+
     def _ergebnis_reiter(self):
         seite = tk.Frame(self.reiter, bg=Style.BG, padx=4, pady=4)
         self.reiter.add(seite, text=" Ergebnisse ")
@@ -489,6 +513,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
             "Groessen es sind. Rot heisst, dass der Wert von "
             "Hand bewegt wurde."))
         self.info_ergebnis.pack(side="left", padx=(10, 0))
+        self._schalter_ohne_x(leiste, before=self.info_ergebnis)
         self.ergebnistabelle = eingaberaster.Eingaberaster(
             seite, hoehe=16, bei_klick=self._block_zeigen,
             schriftgroesse=SCHRIFT, zeilenluft=ZEILENLUFT)
@@ -520,6 +545,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
             text="nur Eintraege mit Bewertung",
             command=self._pruefung_zeigen)
         self.schalter_befunde.pack(side="left", padx=(14, 0))
+        self._schalter_ohne_x(leiste)
         ToolTip(self.schalter_befunde,
                 "Zeigt nur die Proben, zu denen etwas zu sagen ist.\n"
                 "Gerechnet und geschrieben wird weiter ueber die ganze\n"
@@ -1245,7 +1271,8 @@ class TrdfSeite(tk.Frame, TrdfModell):
             spalten, self.methoden, quellen, self.beschreibungen()))
 
     def _rohwerte_zeigen(self):
-        tafel = self.rohtafel(self.v_nur_rohbefunde.get())
+        tafel = self.rohtafel(self.v_nur_rohbefunde.get(),
+                              self.v_ohne_x.get())
         for tabelle in self.rohtabellen:
             tabelle.fuellen(
                 tafel["spalten"], tafel["zeilen"], aenderbar=self.rohliste,
@@ -1260,7 +1287,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
             self._rohmelden(satz, Style.WARN if art == "warn" else Style.TEXT)
 
     def _ergebnisse_zeigen(self):
-        tafel = self.ergebnistafel()
+        tafel = self.ergebnistafel(self.v_ohne_x.get())
 
         def auftrag(tabelle):
             tabelle.zellhinweise(self.aufschlusshinweis)
@@ -1278,7 +1305,8 @@ class TrdfSeite(tk.Frame, TrdfModell):
 
     def _pruefung_zeigen(self):
         """Das Arbeitsblatt fuellen - eine Zeile je Probe."""
-        tafel = self.prueftafel(self.v_nur_befunde.get())
+        tafel = self.prueftafel(self.v_nur_befunde.get(),
+                                self.v_ohne_x.get())
 
         def auftrag(tabelle):
             tabelle.zellhinweise(self.aufschlusshinweis)

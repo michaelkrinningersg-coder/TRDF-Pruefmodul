@@ -1250,7 +1250,23 @@ class TrdfModell:
             marken["Probe"] = "geaendert"
         return werte, marken, bool(bewertung)
 
-    def rohtafel(self, nur_befunde=False) -> dict:
+    def variante_x(self, probe: str) -> bool:
+        """Steht in der Variante ein x - "diese Teilprobe hat keine"?
+
+        Solche Proben lassen sich ausblenden. Geschrieben werden sie
+        trotzdem: der Export fragt nicht, was zu sehen ist.
+        """
+        return str(self.rohwert(probe, trdfrohpruefung.VARIANTE)
+                   or "").strip().lower() == trdf.MARKE
+
+    def _ohne_x(self, zeilen, ohne_x: bool) -> list:
+        """Die Zeilen ohne Proben mit Variante x - nur fuer die Anzeige."""
+        if not ohne_x:
+            return zeilen
+        return [(kennung, werte) for kennung, werte in zeilen
+                if not self.variante_x(kennung)]
+
+    def rohtafel(self, nur_befunde=False, ohne_x=False) -> dict:
         """Die Rohwerttabelle - wie sie dasteht, mit der Zeile darunter."""
         spalten, fest, koepfe, alle = self._rohspalten()
         zeilen, marken, auffaellig = [], {}, 0
@@ -1266,10 +1282,11 @@ class TrdfModell:
             # geschrieben wird weiter ueber die ganze Serie.
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if werte.get(BEWERTUNGSSPALTE)]
+        zeilen = self._ohne_x(zeilen, ohne_x)
         satz = (f"{gesamt - auffaellig} von {gesamt} Proben mit sauberen "
                 f"Rohwerten"
                 + (f"  |  {auffaellig} zu pruefen" if auffaellig else ""))
-        if nur_befunde:
+        if len(zeilen) < gesamt:
             satz += f"  |  {gesamt - len(zeilen)} ausgeblendet"
         return {"spalten": spalten, "fest": fest, "koepfe": koepfe,
                 "alle": alle, "zeilen": zeilen, "marken": marken,
@@ -1323,7 +1340,7 @@ class TrdfModell:
             marken[BEWERTUNGSSPALTE] = "abweichung"
         return werte, marken, auseinander
 
-    def ergebnistafel(self) -> dict:
+    def ergebnistafel(self, ohne_x=False) -> dict:
         """Die berechneten Groessen neben dem, was das LIMS gebucht hat."""
         spalten, gruppen, fest, koepfe, alle = self._ergebnisspalten()
         zeilen, marken, abweichungen = [], {}, 0
@@ -1338,6 +1355,10 @@ class TrdfModell:
         satz = (f"{gesamt - abweichungen} von {gesamt} Werten stimmen"
                 + (f"  |  {abweichungen} Abweichungen" if abweichungen
                    else ""))
+        alle_zeilen = len(zeilen)
+        zeilen = self._ohne_x(zeilen, ohne_x)
+        if len(zeilen) < alle_zeilen:
+            satz += f"  |  {alle_zeilen - len(zeilen)} Proben ausgeblendet"
         return {"spalten": spalten, "gruppen": gruppen, "fest": fest,
                 "koepfe": koepfe, "alle": alle, "zeilen": zeilen,
                 "marken": marken, "gesamt": gesamt,
@@ -1392,7 +1413,7 @@ class TrdfModell:
             marken["Probe-Nr."] = "geaendert"
         return werte, marken
 
-    def prueftafel(self, nur_befunde=False) -> dict:
+    def prueftafel(self, nur_befunde=False, ohne_x=False) -> dict:
         """Das Pruefblatt - eine Zeile je Probe, nach Probe-Nr."""
         spalten, fest, koepfe, alle = self._pruefspalten()
         zeilen, marken, auffaellig = [], {}, 0
@@ -1410,9 +1431,10 @@ class TrdfModell:
                           if eintrag["bewertung"]}
             zeilen = [(kennung, werte) for kennung, werte in zeilen
                       if kennung in mit_befund]
+        zeilen = self._ohne_x(zeilen, ohne_x)
         satz = (f"{gesamt - auffaellig} von {gesamt} Proben ohne Befund"
                 + (f"  |  {auffaellig} zu pruefen" if auffaellig else ""))
-        if nur_befunde:
+        if len(zeilen) < gesamt:
             satz += f"  |  {gesamt - len(zeilen)} ausgeblendet"
         return {"spalten": spalten, "fest": fest, "koepfe": koepfe,
                 "alle": alle, "zeilen": zeilen, "marken": marken,

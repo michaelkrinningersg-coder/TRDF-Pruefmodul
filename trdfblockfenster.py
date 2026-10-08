@@ -114,11 +114,6 @@ class Blockfenster(tk.Toplevel):
                               bg=Style.CARD, highlightthickness=1,
                               highlightbackground=Style.BORDER)
         self.bild.pack(anchor="w")
-        # Die Anteile stehen unter ihrem eigenen Block. Nebeneinander in
-        # einer Spalte waeren es zwei Listen, und man muesste raten,
-        # welche zu welchem Bild gehoert.
-        self.legende = tk.Frame(links, bg=Style.BG)
-        self.legende.pack(fill="x", pady=(6, 0), anchor="w")
 
         daneben = tk.Frame(mitte, bg=Style.BG)
         daneben.pack(side="left", fill="y", padx=(18, 0), anchor="n")
@@ -136,7 +131,9 @@ class Blockfenster(tk.Toplevel):
         self.zahlen = tk.Frame(daneben, bg=Style.BG)
         self.zahlen.pack(fill="x", pady=(10, 0))
 
-        rechts = tk.Frame(mitte, bg=Style.BG)
+        # Die Schaufelprobe steht nur da, wenn sie gewogen wurde - ohne
+        # Masse (0 oder x) faellt die ganze Spalte weg.
+        self.rechts = rechts = tk.Frame(mitte, bg=Style.BG)
         rechts.pack(side="left", anchor="n", padx=(18, 0))
         tk.Label(rechts, text="Schaufelprobe", bg=Style.BG, fg=Style.MUTED,
                  font=Style.font(9), anchor="w").pack(fill="x")
@@ -145,8 +142,15 @@ class Blockfenster(tk.Toplevel):
                                       highlightthickness=1,
                                       highlightbackground=Style.BORDER)
         self.schaufelbild.pack(anchor="w")
-        self.schaufellegende = tk.Frame(rechts, bg=Style.BG)
-        self.schaufellegende.pack(fill="x", pady=(6, 0), anchor="w")
+
+        # Die Legenden unter beiden Bildern, nebeneinander: je Lage eine
+        # Zeile, die Prozente rechtsbuendig untereinander.
+        legenden = tk.Frame(self, bg=Style.BG)
+        legenden.pack(fill="x", padx=RAND, pady=(10, 0))
+        self.legende = tk.Frame(legenden, bg=Style.BG)
+        self.legende.pack(side="left", anchor="n")
+        self.schaufellegende = tk.Frame(legenden, bg=Style.BG)
+        self.schaufellegende.pack(side="left", anchor="n", padx=(28, 0))
 
         tk.Frame(self, bg=Style.BG, height=RAND).pack(fill="x")
         self._stellen(lagen, dichte, variante, skelett, vorrat, roh or {},
@@ -233,11 +237,10 @@ class Blockfenster(tk.Toplevel):
         self.schaufelbild.delete("all")
         teile = self.schaufelteile
         if not teile:
-            self.schaufelbild.create_text(
-                BREITE_SCHAUFEL / 2, HOEHE / 2,
-                text="keine\nSchaufelprobe", fill=Style.MUTED,
-                font=Style.font(9), justify="center")
+            self.rechts.pack_forget()
             return
+        if not self.rechts.winfo_manager():
+            self.rechts.pack(side="left", anchor="n", padx=(18, 0))
         bezug = teile["bezug"]
         gesamt = bezug + teile.get(GROB_GROSS, D(0))
         skala = float(HOEHE) / float(gesamt) if gesamt > 0 else 0.0
@@ -316,12 +319,15 @@ class Blockfenster(tk.Toplevel):
         for rahmen in (self.legende, self.schaufellegende):
             for kind in rahmen.winfo_children():
                 kind.destroy()
+        if self.lagen:
+            self._legendenkopf(self.legende, "Probe")
         for marke, anteil in self.lagen:
-            self._legendenzeile(self.legende, marke,
-                                f"{BESCHRIFTUNG[marke]}: {prozent(anteil)}")
+            self._legendenzeile(self.legende, marke, BESCHRIFTUNG[marke],
+                                prozent(anteil))
         teile = self.schaufelteile
         if not teile:
             return
+        self._legendenkopf(self.schaufellegende, "Schaufelprobe")
         # Unter dem Bild stehen beide Haelften der Lage 2 bis 63 mm:
         # im Block traegt sie eine Zahl, hier ist Platz fuer die
         # Aufteilung, um die es beim Sieben ging.
@@ -330,18 +336,27 @@ class Blockfenster(tk.Toplevel):
             if not teile.get(marke):
                 continue
             self._legendenzeile(
-                self.schaufellegende, marke,
-                f"{BESCHRIFTUNG_SCHAUFEL[marke]}: "
-                f"{anteil_von(teile[marke], teile['bezug'])}")
+                self.schaufellegende, marke, BESCHRIFTUNG_SCHAUFEL[marke],
+                anteil_von(teile[marke], teile["bezug"]))
 
     @staticmethod
-    def _legendenzeile(rahmen, marke, text):
-        zeile = tk.Frame(rahmen, bg=Style.BG)
-        zeile.pack(fill="x", pady=1)
-        tk.Frame(zeile, bg=FARBEN[marke], width=14, height=14).pack(
-            side="left", pady=2)
-        tk.Label(zeile, text=f"  {text}", bg=Style.BG, fg=Style.TEXT,
-                 font=Style.font(9), anchor="w").pack(side="left")
+    def _legendenkopf(rahmen, titel):
+        tk.Label(rahmen, text=titel, bg=Style.BG, fg=Style.MUTED,
+                 font=Style.font(9), anchor="w").grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 2))
+
+    @staticmethod
+    def _legendenzeile(rahmen, marke, text, wert):
+        """Eine Zeile: Farbe, Name, Prozent - der Prozent rechtsbuendig."""
+        zeile = rahmen.grid_size()[1]
+        tk.Frame(rahmen, bg=FARBEN[marke], width=12, height=12).grid(
+            row=zeile, column=0, sticky="w", pady=1)
+        tk.Label(rahmen, text=text, bg=Style.BG, fg=Style.TEXT,
+                 font=Style.font(9), anchor="w").grid(
+            row=zeile, column=1, sticky="w", padx=(6, 12))
+        tk.Label(rahmen, text=wert, bg=Style.BG, fg=Style.TEXT,
+                 font=Style.font(9, "bold"), anchor="e").grid(
+            row=zeile, column=2, sticky="e")
 
 
 def zeigen(eltern, probe: str, roh: dict, gerechnet: dict,

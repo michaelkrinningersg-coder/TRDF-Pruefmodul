@@ -173,15 +173,6 @@ class Websitzung(TrdfModell):
         return {"id": eintrag["probe"], "w": klar(werte), "m": marken,
                 "b": befund, "x": self.variante_x(eintrag["probe"])}
 
-    def variante_x(self, probe: str) -> bool:
-        """Steht in der Variante ein x - "diese Teilprobe hat keine"?
-
-        Solche Proben lassen sich in der Seite ausblenden. Geschrieben
-        werden sie trotzdem: der Export fragt nicht, was zu sehen ist.
-        """
-        return str(self.rohwert(probe, trdfrohpruefung.VARIANTE)
-                   or "").strip().lower() == trdf.MARKE
-
     def rohstand(self) -> dict:
         gesamt = len(self.proben)
         auffaellig = sum(1 for wert in self.zaehler["roh"].values() if wert)
