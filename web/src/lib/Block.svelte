@@ -99,11 +99,6 @@
           {/if}
         {/each}
       </svg>
-      <ul class="legende">
-        {#each daten.legende as l}
-          <li><i style:background={l.farbe}></i>{l.text}</li>
-        {/each}
-      </ul>
     </div>
 
     <div class="zahlen">
@@ -121,13 +116,11 @@
       {/each}
     </div>
 
+    <!-- Nur mit gewogener Schaufelprobe (Masse nicht 0 oder x). -->
+    {#if daten.schaufel.length}
     <div class="spalte">
       <div class="klein">Schaufelprobe</div>
       <svg width={BREITE_SCHAUFEL} height={HOEHE} class="saeule">
-        {#if !daten.schaufel.length}
-          <text x={BREITE_SCHAUFEL / 2} y={HOEHE / 2 - 6} text-anchor="middle" class="leer">keine</text>
-          <text x={BREITE_SCHAUFEL / 2} y={HOEHE / 2 + 10} text-anchor="middle" class="leer">Schaufelprobe</text>
-        {/if}
         {#each daten.schaufel as l}
           {@const g = lage(l, HOEHE)}
           {#if !l.nur_text}
@@ -142,12 +135,24 @@
             stroke="#111827" stroke-dasharray="4 3" />
         {/if}
       </svg>
-      <ul class="legende">
-        {#each daten.schaufellegende as l}
-          <li><i style:background={l.farbe}></i>{l.text}</li>
-        {/each}
-      </ul>
     </div>
+    {/if}
+  </div>
+
+  <!-- Je Lage eine Zeile, die Prozente rechtsbuendig untereinander. -->
+  <div class="legenden">
+    {#each [["Probe", daten.legende], ["Schaufelprobe", daten.schaufellegende]] as [titel, zeilen]}
+      {#if zeilen.length}
+        <div class="legende">
+          <div class="klein">{titel}</div>
+          {#each zeilen as l}
+            <i style:background={l.farbe}></i>
+            <span class="text">{l.text}</span>
+            <span class="prozent">{l.wert}</span>
+          {/each}
+        </div>
+      {/if}
+    {/each}
   </div>
   <footer>Von unten nach oben: Feinboden, gewogener Grobboden, geschätzter Grobboden. Über der gestrichelten Linie: was größer als 63 mm war. ↑/↓ blättert.</footer>
 </section>
@@ -275,25 +280,37 @@
   .zeile span:first-child {
     color: var(--text-2);
   }
-  .legende {
-    list-style: none;
-    padding: 0;
-    margin: 6px 0 0;
-    font-size: 11.5px;
-    max-width: 170px;
+  .legenden {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    padding: 4px 16px 4px;
   }
-  .legende li {
-    display: flex;
-    gap: 6px;
-    align-items: flex-start;
-    margin: 2px 0;
+  .legende {
+    display: grid;
+    grid-template-columns: 11px 1fr auto;
+    column-gap: 8px;
+    row-gap: 3px;
+    align-items: center;
+    font-size: 12px;
+  }
+  .legende .klein {
+    grid-column: 1 / -1;
   }
   .legende i {
-    flex: none;
     width: 11px;
     height: 11px;
     border-radius: 2px;
-    margin-top: 2px;
+  }
+  .legende .text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .legende .prozent {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
   footer {
     font-size: 11.5px;

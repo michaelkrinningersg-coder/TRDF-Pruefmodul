@@ -15,6 +15,7 @@
     zeilen = [],
     auswahl = [],
     nurBefunde = false,
+    ohneX = false,
     zeilenhoehe = 32,
     bearbeitbar = false,
     sehen = null,
@@ -59,7 +60,13 @@
   );
 
   // ------------------------------------------------------------- Zeilen
-  let sichtbar = $derived(nurBefunde ? zeilen.filter((z) => z.b) : zeilen);
+  // Ausgeblendet wird nur in der Anzeige - gerechnet und geschrieben wird
+  // weiter ueber die ganze Serie.
+  let sichtbar = $derived(
+    nurBefunde || ohneX
+      ? zeilen.filter((z) => (!nurBefunde || z.b) && (!ohneX || !z.x))
+      : zeilen,
+  );
   let gewaehlt = $derived(new Set(auswahl));
 
   // ----------------------------------------------------- Virtualisieren
@@ -774,7 +781,7 @@
       </div>
     </div>
     {#if !sichtbar.length}
-      <div class="leer unten">Keine Zeilen mit Befund.</div>
+      <div class="leer unten">Keine Zeilen zu zeigen.</div>
     {/if}
   {/if}
 </div>

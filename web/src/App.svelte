@@ -39,6 +39,8 @@
   let teilung = $state(0.38);
   let nurRohBefunde = $state(false);
   let nurBefunde = $state(false);
+  // Proben mit Variante x ausblenden - von Haus aus aus.
+  let ohneX = $state(false);
   let dichte = $state(leseDichte());
   let arbeitszeile = $state(null);
   let blick = $state(null); // welche Probe die Tabellen in den Blick rollen
@@ -77,6 +79,7 @@
     ...bloecke.map((b) => b.probe),
   ]);
   let offeneBloecke = $derived(bloecke.map((b) => b.probe));
+  let anzahlX = $derived(tafeln?.roh.zeilen.filter((z) => z.x).length ?? 0);
   let befunde = $derived({
     roh: tafeln?.roh.zeilen.filter((z) => z.b).length ?? 0,
     ergebnis: tafeln?.ergebnis.zeilen.filter((z) => z.b).length ?? 0,
@@ -552,6 +555,7 @@
           <button class="knopf klein" onclick={anhangVorschau} disabled={!tafeln} type="button"
             title="Den Teilprobenanhang auf den Stand der Ergebniszeile bringen">Anhang angleichen</button>
           <label class="schalter"><input type="checkbox" bind:checked={nurRohBefunde} /> nur mit Bewertung</label>
+          <label class="schalter" title="Proben, deren Variante x ist, nur in der Anzeige weglassen - geschrieben werden sie trotzdem"><input type="checkbox" bind:checked={ohneX} /> Variante x ausblenden{anzahlX ? ` (${anzahlX})` : ""}</label>
           <Info text={ERKLAERUNG.roh} />
           <Info dezent breit>
             <div class="tasten">
@@ -586,6 +590,7 @@
                   zeilenhoehe={zeilenhoehe - 4}
                   onProbe={blockOeffnen}
               onZeileGewaehlt={zeileGewaehlt}
+              {ohneX}
                   onSpalteVerschieben={(von, nach) => spalteVerschieben("ergebnis", "roh", von, nach)}
                 />
               </div>
@@ -606,6 +611,7 @@
               onFuellen={fuellen}
               onProbe={blockOeffnen}
               onZeileGewaehlt={zeileGewaehlt}
+              {ohneX}
               onZeile={(p) => { arbeitszeile = p; blick = p; }}
               sehen={blick}
               onMeldung={rasterMeldung}
@@ -620,6 +626,7 @@
         <div class="leiste">
           <button class="knopf klein" onclick={() => legendeZeigen("ergebnis")} disabled={!tafeln} type="button">Info</button>
           <button class="knopf klein" onclick={() => csv("ergebnis", "ergebnis")} disabled={!tafeln} type="button">Ergebnisblatt CSV</button>
+          <label class="schalter" title="Proben, deren Variante x ist, nur in der Anzeige weglassen - geschrieben werden sie trotzdem"><input type="checkbox" bind:checked={ohneX} /> Variante x ausblenden{anzahlX ? ` (${anzahlX})` : ""}</label>
           <Info text={ERKLAERUNG.ergebnis} />
           <span class="stand {(meldungZeile.ergebnis ?? tafeln?.ergebnis.stand)?.art}">
             {(meldungZeile.ergebnis ?? tafeln?.ergebnis.stand)?.text ?? ""}
@@ -635,6 +642,7 @@
               {zeilenhoehe}
               onProbe={blockOeffnen}
               onZeileGewaehlt={zeileGewaehlt}
+              {ohneX}
               onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
@@ -648,14 +656,12 @@
           <button class="knopf klein" onclick={() => csv("pruefung", "pruefung")} disabled={!tafeln} type="button">Blatt CSV</button>
           <button class="knopf klein primaer" onclick={bildZeigen} disabled={!tafeln} type="button">Bild</button>
           <label class="schalter"><input type="checkbox" bind:checked={nurBefunde} /> nur mit Befund</label>
+          <label class="schalter" title="Proben, deren Variante x ist, nur in der Anzeige weglassen - geschrieben werden sie trotzdem"><input type="checkbox" bind:checked={ohneX} /> Variante x ausblenden{anzahlX ? ` (${anzahlX})` : ""}</label>
           <Info text={ERKLAERUNG.pruefung + (zustand?.legende ? "\n\n" + zustand.legende : "")} breit />
           <span class="stand {(meldungZeile.pruefung ?? tafeln?.pruefung.stand)?.art}">
             {(meldungZeile.pruefung ?? tafeln?.pruefung.stand)?.text ?? ""}
           </span>
         </div>
-        {#if zustand?.legende}
-          <div class="legendenzeile">{zustand.legende.split("\n")[1] ?? ""}</div>
-        {/if}
         <div class="karte voll">
           {#if reiter === "pruefung"}
             <Raster
@@ -667,6 +673,7 @@
               {zeilenhoehe}
               onProbe={blockOeffnen}
               onZeileGewaehlt={zeileGewaehlt}
+              {ohneX}
               onSpalteVerschieben={(von, nach) => spalteVerschieben(reiter, reiter, von, nach)}
             />
           {/if}
@@ -695,6 +702,7 @@
               leerText="Es wurde in dieser Sitzung noch nichts geschrieben."
               onProbe={blockOeffnen}
               onZeileGewaehlt={zeileGewaehlt}
+              {ohneX}
             />
           {/if}
         </div>
@@ -1067,13 +1075,6 @@
   }
   .unten {
     flex: 1;
-  }
-  .legendenzeile {
-    font-size: 12px;
-    color: var(--text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .tasten table {
     border-collapse: collapse;

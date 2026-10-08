@@ -211,6 +211,12 @@ def schaufel(roh: dict, gerechnet: dict) -> dict:
     Schaufelprobe oder die Trockenrohdichte, und ein Verhaeltnis ohne
     seinen groessten Teil waere eine Falschauskunft.
     """
+    # Ohne gewogene Schaufelprobe gibt es keine - auch wenn aus anderen
+    # Werten ein Feinboden zu rechnen waere. Eine Masse 0 oder x heisst:
+    # diese Probe wurde nicht mit der Schaufel genommen.
+    masse_schaufel = _zahl(roh.get(MASSE_SCHAUFEL))
+    if masse_schaufel is None or masse_schaufel <= 0:
+        return {}
     fein = _teilen(gerechnet.get(FEIN_SCHAUFEL), gerechnet.get(DICHTE))
     dichte = roh.get(DICHTE_GB)
     klein = _teilen(roh.get(GROBBODEN_263), dichte)
@@ -320,8 +326,8 @@ def blockdaten(probe: str, roh: dict, gerechnet: dict) -> dict:
         bild.append(_lage(marke, unten / GANZ, anteil / GANZ,
                           prozent(anteil)))
         unten += anteil
-    legende = [{"farbe": FARBEN[marke],
-                "text": f"{BESCHRIFTUNG[marke]}: {prozent(anteil)}"}
+    legende = [{"farbe": FARBEN[marke], "text": BESCHRIFTUNG[marke],
+                "wert": prozent(anteil)}
                for marke, anteil in lagen]
 
     teile = schaufel(roh, gerechnet)
@@ -363,8 +369,8 @@ def blockdaten(probe: str, roh: dict, gerechnet: dict) -> dict:
             if teile.get(marke):
                 schaufellegende.append({
                     "farbe": FARBEN[marke],
-                    "text": f"{BESCHRIFTUNG_SCHAUFEL[marke]}: "
-                            f"{anteil_von(teile[marke], bezug)}"})
+                    "text": BESCHRIFTUNG_SCHAUFEL[marke],
+                    "wert": anteil_von(teile[marke], bezug)})
     return {
         "probe": probe, "variante": variante,
         "dichte": dichtetext(gerechnet.get(DICHTE)),

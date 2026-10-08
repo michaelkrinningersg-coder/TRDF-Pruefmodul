@@ -251,8 +251,8 @@ def test_das_bild_traegt_baender_und_punkte():
 
 
 def test_blockdaten_wie_im_fenster():
-    roh = {"_TRDV": "4", "DichteGB": "2,65", "GBM263Schaufel": "120",
-           "GBMSchaufel": "30"}
+    roh = {"_TRDV": "4", "MSchaufel": "950", "DichteGB": "2,65",
+           "GBM263Schaufel": "120", "GBMSchaufel": "30"}
     gerechnet = {"_SKA": D(25), "VOLGB63gs": D(10), "TRD_TRDF": D("1.2"),
                  "FBVb": D(1500), "FBMSchaufel": D(800)}
     daten = trdfblock.blockdaten("26B1", roh, gerechnet)
@@ -265,6 +265,44 @@ def test_blockdaten_wie_im_fenster():
     # Die Lage 2 bis 63 mm traegt eine Zahl, gezeichnet wird sie geteilt.
     nur_text = [lage for lage in daten["schaufel"] if lage.get("nur_text")]
     assert len(nur_text) == 1 and nur_text[0]["text"]
+
+
+def test_ohne_masse_der_schaufelprobe_kein_schaufelbild():
+    roh = {"_TRDV": "4", "DichteGB": "2,65", "GBM263Schaufel": "120"}
+    gerechnet = {"_SKA": D(25), "TRD_TRDF": D("1.2"), "FBMSchaufel": D(800)}
+    for masse in (None, "", "x", "0", "0,0"):
+        if masse is not None:
+            roh["MSchaufel"] = masse
+        daten = trdfblock.blockdaten("26B1", roh, gerechnet)
+        assert daten["schaufel"] == [] and daten["schaufellegende"] == [], masse
+    roh["MSchaufel"] = "950"
+    assert trdfblock.blockdaten("26B1", roh, gerechnet)["schaufel"]
+
+
+def test_die_legende_traegt_text_und_prozent_getrennt():
+    roh = {"_TRDV": "4", "MSchaufel": "950", "DichteGB": "2,65",
+           "GBM263Schaufel": "120"}
+    gerechnet = {"_SKA": D(25), "VOLGB63gs": D(10), "TRD_TRDF": D("1.2"),
+                 "FBMSchaufel": D(800)}
+    daten = trdfblock.blockdaten("26B1", roh, gerechnet)
+    for eintrag in daten["legende"] + daten["schaufellegende"]:
+        assert eintrag["wert"].endswith("%")
+        assert "%" not in eintrag["text"]
+    assert daten["legende"][0] == {"farbe": trdfblock.FARBEN["fein"],
+                                   "text": "Feinboden", "wert": "75,0 %"}
+
+
+def test_proben_mit_variante_x_sind_gekennzeichnet():
+    """Die Seite blendet sie auf Wunsch aus - geschrieben wird trotzdem."""
+    bruecke, voll = geladen()
+    assert not any(z["x"] for z in voll["tafeln"]["roh"]["zeilen"])
+    antwort = bruecke.setzen([["26B0003", "_TRDV", "x"]], "tippen")
+    assert antwort["roh"][0]["x"] is True
+    assert antwort["ergebnis"][0]["x"] is True
+    assert antwort["pruefung"][0]["x"] is True
+    # Was sich dabei bewegt hat, steht in der Uebersicht vor dem Export.
+    vorschau = bruecke.export_vorschau()["vorschau"]
+    assert any(zeile[1] == "26B0003" for zeile in vorschau["zeilen"])
 
 
 def test_bild_ohne_aufschluss_steht_am_rand():

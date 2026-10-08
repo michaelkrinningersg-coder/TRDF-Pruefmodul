@@ -156,7 +156,7 @@ class Websitzung(TrdfModell):
         werte, marken, befund = self.rohzeile(lnr, probe)
         self.zaehler["roh"][probe] = befund
         return {"id": probe, "w": klar(werte), "m": marken,
-                "b": befund,
+                "b": befund, "x": self.variante_x(probe),
                 "l": [k for k in self.rohliste if self.ist_leer(probe, k)],
                 "h": self.von_hand_bewegt(probe)}
 
@@ -164,14 +164,23 @@ class Websitzung(TrdfModell):
         werte, marken, auseinander = self.ergebniszeile(lnr, probe, gruppen)
         self.zaehler["ergebnis"][probe] = len(auseinander)
         return {"id": probe, "w": klar(werte), "m": marken,
-                "b": bool(auseinander)}
+                "b": bool(auseinander), "x": self.variante_x(probe)}
 
     def _pruefzeile(self, eintrag, spalten) -> dict:
         werte, marken = self.pruefzeile(eintrag, spalten)
         befund = bool(eintrag["bewertung"])
         self.zaehler["pruefung"][eintrag["probe"]] = befund
         return {"id": eintrag["probe"], "w": klar(werte), "m": marken,
-                "b": befund}
+                "b": befund, "x": self.variante_x(eintrag["probe"])}
+
+    def variante_x(self, probe: str) -> bool:
+        """Steht in der Variante ein x - "diese Teilprobe hat keine"?
+
+        Solche Proben lassen sich in der Seite ausblenden. Geschrieben
+        werden sie trotzdem: der Export fragt nicht, was zu sehen ist.
+        """
+        return str(self.rohwert(probe, trdfrohpruefung.VARIANTE)
+                   or "").strip().lower() == trdf.MARKE
 
     def rohstand(self) -> dict:
         gesamt = len(self.proben)
