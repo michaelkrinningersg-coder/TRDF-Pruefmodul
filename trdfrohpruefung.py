@@ -146,7 +146,10 @@ def nach_variante(werte: dict, eingabe) -> dict:
     if text == LEEREN:
         return {kuerzel: "" for kuerzel in uebrige}
     if trdf.leer(text):                     # ein eingegebenes x
-        return {kuerzel: trdf.MARKE for kuerzel in uebrige}
+        # Wo schon ein x oder X steht, aendert sich nichts.
+        return {kuerzel: trdf.MARKE for kuerzel in uebrige
+                if str(werte.get(kuerzel) or "").strip().lower()
+                != trdf.MARKE}
     nummer = variante({VARIANTE: text})
     if nummer not in MASKIERT:
         return {}                           # unbekannt - dann lieber nichts
@@ -156,8 +159,10 @@ def nach_variante(werte: dict, eingabe) -> dict:
     # Zahl, steht dort ein x.
     if SKA_FOTO in werte and _zahl(werte.get(SKA_FOTO)) is None:
         neu[SKA_FOTO] = trdf.MARKE
+    # Ein X, wo ein x hin soll, ist schon richtig - gross und klein
+    # gelten gleich.
     return {kuerzel: wert for kuerzel, wert in neu.items()
-            if str(werte.get(kuerzel) or "").strip() != wert}
+            if str(werte.get(kuerzel) or "").strip().lower() != wert.lower()}
 
 # --------------------------------------------------------------------------
 # Die Grenzen der einzelnen Werte

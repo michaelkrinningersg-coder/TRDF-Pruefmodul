@@ -721,6 +721,16 @@ class TrdfSeite(tk.Frame):
                       height=28, bg="#334155",
                       command=self._ergebnisblatt_speichern).pack(side="left")
         self._infoknopf(leiste, self._ergebnislegende_zeigen)
+        self.knopf_ergebnisse_angleichen = RoundedButton(
+            leiste, text="Ergebnisse angleichen", width=160, height=28,
+            bg="#a16207", command=self._ergebnisse_angleichen)
+        self.knopf_ergebnisse_angleichen.pack(side="left", padx=(8, 0))
+        ToolTip(self.knopf_ergebnisse_angleichen,
+                "Schreibt die hier berechneten Groessen in die\n"
+                "Ergebniszeilen des LIMS - dort, wo noch nichts steht\n"
+                "(x) oder etwas anderes. Vorher kommt dieselbe\n"
+                "Uebersicht wie beim Export, und der alte Stand wird\n"
+                "gesichert. Rohwerte werden dabei nicht angefasst.")
         self.info_ergebnis = Infozeichen(leiste, erklaerung(
             "Je Groesse zwei Spalten: was das LIMS gebucht hat "
             "und was das Pruefmodul aus denselben Formeln rechnet - "
@@ -1678,7 +1688,7 @@ class TrdfSeite(tk.Frame):
                         str(self.limsroh.get(probe, {}).get(kuerzel)
                             or "").strip():
                     continue
-                self.vonhand[(probe, kuerzel)] = str(wert).strip()
+                self.vonhand[(probe, kuerzel)] = trdf.marke_klein(wert)
                 vorgemerkt += 1
         return vorgemerkt
 
@@ -1728,6 +1738,8 @@ class TrdfSeite(tk.Frame):
         return any(welche == probe for (welche, _k) in self.vonhand)
 
     def _von_hand_geaendert(self, zeile, spalte, wert):
+        # Ein getipptes X wird ein x - das ist die Schreibweise hier.
+        wert = trdf.marke_klein(wert)
         self.vonhand[(zeile, spalte)] = wert
         if spalte == trdfrohpruefung.VARIANTE:
             self._variante_wirkt(zeile, wert)
@@ -1854,6 +1866,8 @@ class TrdfSeite(tk.Frame):
         dreihundertmal dieselbe Arbeit; hier wird alles uebernommen und
         danach ein einziges Mal gerechnet und gezeichnet.
         """
+        gesetzt = [(zeile, spalte, trdf.marke_klein(wert))
+                   for zeile, spalte, wert in gesetzt]
         for zeile, spalte, wert in gesetzt:
             self.vonhand[(zeile, spalte)] = wert
             for tabelle in self.rohtabellen:
@@ -2219,6 +2233,13 @@ class TrdfSeite(tk.Frame):
         for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
             for kuerzel, (zeile, am_anhang) in sorted(
                     self._anhangvergleich(probe).items()):
+                if trdf.zahl(zeile) is None and trdf.ist_grosses_x(am_anhang):
+                    # Ein grosses X am Anhang wird beim Angleichen klein -
+                    # gleich gilt es ohnehin, geschrieben wird das x.
+                    gefunden.append(self._aenderung(
+                        {"lnr": lnr, "probe": probe}, kuerzel,
+                        trdfexport.ROHWERT, am_anhang, trdf.MARKE))
+                    continue
                 if trdf.zahl(zeile) is None or trdf.zahl(zeile) == trdf.zahl(
                         am_anhang):
                     continue
@@ -2727,6 +2748,62 @@ class TrdfSeite(tk.Frame):
             return
         Exportvorschau(self, geaendert, self.v_serie.get().strip(),
                        lambda: self._wirklich_schreiben(geaendert))
+
+    def ergebnis_angleichung(self) -> list:
+        """Die berechneten Groessen, die im LIMS anders stehen - oder gar nicht.
+
+        Solange eine Serie im LIMS noch nicht gerechnet ist, steht in der
+        Ergebnistabelle ueberall x. Hier wird daraus, was das Pruefmodul
+        mit denselben Formeln rechnet. Nur wo es etwas zu rechnen gab:
+        eine Groesse ohne Ergebnis (fehlender Rohwert) bleibt, wie sie ist.
+        """
+        gefunden = []
+        for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
+            eckdaten = {"lnr": lnr, "probe": probe}
+            ergebnis = self.gerechnet(probe)
+            for kuerzel in self.folge:
+                neu = ergebnis.get(kuerzel)
+                alt = self.gebucht.get(probe, {}).get(kuerzel)
+                if not isinstance(neu, trdf.D):
+                    # Nichts zu rechnen - aber ein grosses X im LIMS wird
+                    # beim Angleichen zum kleinen.
+                    if trdf.ist_grosses_x(alt):
+                        gefunden.append(self._aenderung(
+                            eckdaten, kuerzel, trdfexport.BERECHNET, alt,
+                            trdf.MARKE))
+                    continue
+                if not trdfexport.bewegt(alt, neu):
+                    continue
+                gefunden.append(self._aenderung(eckdaten, kuerzel,
+                                                trdfexport.BERECHNET, alt,
+                                                neu))
+        return gefunden
+
+    def _ergebnisse_angleichen(self):
+        """Die berechneten Groessen in das LIMS - nach derselben Uebersicht.
+
+        Gerechnet wird mit den Rohwerten, wie sie im LIMS (oder in der
+        eingefuegten UM) stehen. Von Hand geaenderte Rohwerte gehoeren
+        zuerst ueber "Export" in das LIMS - sonst stuenden dort Ergebnisse
+        aus Rohwerten, die es dort nicht gibt.
+        """
+        zugang = self._zugang_holen()
+        if zugang is None:
+            self._melden("Erst anmelden.", Style.WARN)
+            return
+        if self.vonhand:
+            self._melden("Es gibt von Hand geaenderte Rohwerte - die "
+                         "zuerst ueber \u201eExport\u201c schreiben, dann "
+                         "die Ergebnisse angleichen.", Style.WARN)
+            return
+        geaendert = self.ergebnis_angleichung()
+        if not geaendert:
+            self._melden("Die Ergebnisse im LIMS stimmen mit den "
+                         "berechneten ueberein.", Style.TEXT)
+            return
+        Exportvorschau(self, geaendert, self.v_serie.get().strip(),
+                       lambda: self._wirklich_schreiben(geaendert),
+                       nur_ergebnisse=True)
 
     def _anhang_angleichen(self):
         """Den Teilprobenanhang auf den Stand der Ergebniszeile bringen.
@@ -3285,10 +3362,11 @@ class Exportvorschau(tk.Toplevel):
     """
 
     def __init__(self, eltern, aenderungen, serie: str, wenn_ja,
-                 zurueck=False, nur_anhang=False):
+                 zurueck=False, nur_anhang=False, nur_ergebnisse=False):
         super().__init__(eltern)
         self.title(("Load backup - " if zurueck
                     else "Teilprobenanhang angleichen - Serie " if nur_anhang
+                    else "Ergebnisse angleichen - Serie " if nur_ergebnisse
                     else "Export in das LIMS - Serie ") + serie)
         self.configure(bg=Style.BG)
         self.geometry("1180x580")
@@ -3302,7 +3380,26 @@ class Exportvorschau(tk.Toplevel):
         ohne = trdfexport.ohne_zeile(self.aenderungen)
         wieder = [] if zurueck or nur_anhang else trdfexport.schon_korrigiert(
             self.aenderungen)
-        if nur_anhang:
+        if nur_ergebnisse:
+            leer = [eine for eine in self.aenderungen
+                    if not str(eine.get("alt") or "").strip()
+                    or trdf.zahl(eine.get("alt")) is None]
+            hinweis = ("Geschrieben werden die berechneten Groessen: in "
+                       "ERGEBNISSE MW_ROH und MW mit dem Wert, den das "
+                       "Pruefmodul aus den Rohwerten im LIMS rechnet, dazu "
+                       f"FC8 = „{lims_db.TRDF_FC8}“, der Bearbeitungsstand "
+                       "und das Korrekturkennzeichen. Rohwerte und "
+                       "Teilprobenanhang werden nicht angefasst. "
+                       f"{len(leer)} Werte stehen im LIMS noch nicht da, "
+                       f"{len(self.aenderungen) - len(leer)} stehen dort "
+                       "anders. Der Stand von jetzt geht vorher in den "
+                       f"Ordner „{trdfexport.ORDNER}“.")
+            gross = [eine for eine in self.aenderungen
+                     if trdf.ist_grosses_x(eine.get("alt"))]
+            if gross:
+                hinweis += (f" Darunter {len(gross)} grosse X, die zum "
+                            "kleinen x werden.")
+        elif nur_anhang:
             hinweis = ("Geschrieben wird nur der Teilprobenanhang: er "
                        "bekommt den Wert, der in der Ergebniszeile steht. "
                        "Die Ergebniszeile selbst wird nicht angefasst - sie "
@@ -3311,6 +3408,11 @@ class Exportvorschau(tk.Toplevel):
                        "Ergebnistabelle. Der bisherige Wert des Anhangs "
                        "geht wie immer nach MW_OLD, und der Stand von jetzt "
                        f"vorher in den Ordner „{trdfexport.ORDNER}“.")
+            gross = [eine for eine in self.aenderungen
+                     if trdf.ist_grosses_x(eine.get("alt"))]
+            if gross:
+                hinweis += (f" {len(gross)} grosse X am Anhang werden zum "
+                            "kleinen x.")
         elif zurueck:
             hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
                        "MW_ROH und MW, der Bearbeitungsstand, das "

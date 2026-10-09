@@ -74,6 +74,24 @@ def leer(wert) -> bool:
     return (not text) or text.lower() == MARKE or bool(_VERWEIS.match(text))
 
 
+def marke_klein(wert):
+    """Ein x ist ein x - gross oder klein. Geschrieben wird es klein.
+
+    Das LIMS kennt beide Schreibweisen fuer "hier soll nichts stehen";
+    verglichen werden sie immer gleich, und was das Pruefmodul selbst
+    hinschreibt, ist das kleine x.
+    """
+    if wert is None:
+        return wert
+    text = str(wert).strip()
+    return MARKE if text.lower() == MARKE else text
+
+
+def ist_grosses_x(wert) -> bool:
+    """Steht hier ein grosses X - eines, das beim Angleichen klein wird?"""
+    return str(wert if wert is not None else "").strip() == MARKE.upper()
+
+
 def zahl(wert):
     """Die Zahl hinter einem Feld - None, wo keine steht.
 

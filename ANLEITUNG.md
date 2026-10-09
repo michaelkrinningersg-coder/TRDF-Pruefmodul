@@ -13,6 +13,8 @@ Die Bilder zeigen die Beispielserie 2026B051 mit erfundenen Werten.
 
 ![Anmeldung](docs/bilder/01_anmeldung.png)
 
+**Meldung DPY-3015 (Passwort im alten Format):** Das Passwort dieses Kontos ist in der Datenbank noch im alten Oracle-10g-Format gespeichert. Das Programm meldet sich dann wie das LIMS über den Oracle Client unter `C:\Oracle\11.2.0` an (x86-exe). Lässt sich der Client nicht laden, kommt die Meldung: neues Passwort setzen lassen und neu anmelden – oder mit einem anderen Account anmelden.
+
 ## 2. Serie abfragen
 
 1. **Serie** aus der Liste wählen oder eintippen.
@@ -79,6 +81,8 @@ Die Tastenkürzel stehen auch im grauen **i** neben den Knöpfen der Rohwerte.
 | Strg+Shift+E | leere Zellen der **Spalte** mit `x` füllen |
 
 „Leer“ heißt: Es steht wirklich nichts da. Ein `x` bedeutet „hier soll nichts stehen“ und wird von Strg+L und Strg+E nicht überschrieben.
+
+Großes `X` und kleines `x` gelten beim Vergleich immer als dasselbe. Geschrieben wird das kleine `x` – ein getipptes `X` wird zu `x`.
 
 ### Spalte Variante (`_TRDV`)
 
@@ -167,6 +171,14 @@ Der Reiter **Exportbericht** zeigt den letzten Sendevorgang:
 Darüber stehen Serie, Zeitpunkt, Anzahl und der Pfad der Sicherung. **Bericht als CSV** legt den Bericht neben die Sicherung.
 
 ![Exportbericht](docs/bilder/12_exportbericht.png)
+
+### Ergebnisse angleichen
+
+Ist eine Serie im LIMS noch nicht gerechnet, steht im Reiter **Ergebnisse** in der Spalte LIMS überall `x`. **Ergebnisse angleichen** schreibt die im Prüfmodul berechneten Größen in die Ergebniszeilen des LIMS – dort, wo noch nichts oder etwas anderes steht. Ein großes `X` wird dabei zum kleinen `x`. Rohwerte und Teilprobenanhang bleiben, wie sie sind.
+
+Wie beim Export kommt zuerst die **Übersicht** zur Bestätigung, dann die **Sicherung** in `trdf_backup`; jede UPDATE-Anweisung wird protokolliert, danach wird nachgelesen. Gibt es noch von Hand geänderte Rohwerte, erst über **Export** schreiben, dann angleichen.
+
+**Anhang angleichen** (Reiter Rohwerte) bringt umgekehrt den Teilprobenanhang auf den Stand der Ergebniszeile; auch dort wird ein großes `X` zum kleinen `x`.
 
 ### Rückgängig machen
 

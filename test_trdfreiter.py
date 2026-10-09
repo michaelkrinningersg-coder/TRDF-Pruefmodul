@@ -2795,6 +2795,164 @@ def test_die_vorschau_sagt_dass_nur_der_anhang_geschrieben_wird():
     mit_fenster(pruefen)
 
 
+
+# ------------------------------------------------ Ergebnisse angleichen
+
+def _noch_nicht_gerechnet(blatt, probe="26B0011"):
+    """Wie eine Serie, die im LIMS noch nicht gerechnet ist: ueberall leer."""
+    for kuerzel in blatt.folge:
+        blatt.gebucht.setdefault(probe, {})[kuerzel] = None
+    blatt._rechnung_vergessen()
+
+
+def test_ergebnisse_angleichen_bringt_die_berechneten_groessen_mit():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        assert blatt.knopf_ergebnisse_angleichen
+        _noch_nicht_gerechnet(blatt)
+        geaendert = blatt.ergebnis_angleichung()
+        assert geaendert
+        assert all(eine["art"] == trdfexport.BERECHNET for eine in geaendert)
+        assert all(eine["alt"] is None for eine in geaendert)
+        assert all(isinstance(eine["neu"], D) for eine in geaendert)
+        # nur Ergebniszeilen - der Teilprobenanhang bleibt
+        assert trdfexport.anhangsaetze(geaendert) == []
+        assert len(trdfexport.saetze(geaendert)) == len(geaendert)
+    mit_fenster(pruefen)
+
+
+def test_ergebnisse_angleichen_schreibt_nach_sicherung_und_uebernimmt():
+    def pruefen(fenster):
+        gemerkt = {}
+
+        def exportieren(zugang, saetze, hinweise=None, anhang=None,
+                        anhang_hinweise=None, zurueck=False, leeren=False):
+            gemerkt["saetze"] = list(saetze)
+            gemerkt["anhang"] = list(anhang or [])
+            return {"geschrieben": len(saetze), "ohne_zeile": [],
+                    "versucht": len(saetze), "anhang_geschrieben": 0,
+                    "anhang_ohne_zeile": [], "nicht_uebernommen": [],
+                    "anhang_nicht_uebernommen": []}
+
+        echt = trdfreiter.lims_db.trdf_exportieren
+        trdfreiter.lims_db.trdf_exportieren = exportieren
+        try:
+            with tempfile.TemporaryDirectory() as basis:
+                blatt = seite(fenster, zeilen=(11,), ordner=basis)
+                blatt._im_hintergrund = (
+                    lambda arbeit, fertig, schief: fertig(arbeit()))
+                _noch_nicht_gerechnet(blatt)
+                geaendert = blatt.ergebnis_angleichung()
+                blatt._wirklich_schreiben(geaendert)
+                assert os.listdir(os.path.join(basis, trdfexport.ORDNER))
+        finally:
+            trdfreiter.lims_db.trdf_exportieren = echt
+        assert len(gemerkt["saetze"]) == len(geaendert)
+        assert gemerkt["anhang"] == []
+        # Was geschrieben ist, steht jetzt als LIMS-Stand da.
+        assert blatt.ergebnis_angleichung() == []
+    mit_fenster(pruefen)
+
+
+def test_ergebnisse_angleichen_erst_nach_dem_export_der_handwerte():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        _noch_nicht_gerechnet(blatt)
+        blatt._von_hand_geaendert("26B0011", "GMSZ", "850")
+        blatt._ergebnisse_angleichen()
+        assert "zuerst" in blatt.stand.cget("text")
+    mit_fenster(pruefen)
+
+
+def test_ergebnisse_angleichen_ohne_unterschied_sagt_es():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        for kuerzel in blatt.folge:
+            wert = blatt.gerechnet("26B0011").get(kuerzel)
+            if isinstance(wert, D):
+                blatt.gebucht.setdefault("26B0011", {})[kuerzel] = \
+                    str(wert).replace(".", ",")
+        blatt._ergebnisse_angleichen()
+        assert "stimmen mit den berechneten" in blatt.stand.cget("text")
+    mit_fenster(pruefen)
+
+
+def test_die_vorschau_zum_angleichen_sagt_was_geschrieben_wird():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        _noch_nicht_gerechnet(blatt)
+        vorschau = trdfreiter.Exportvorschau(
+            fenster, blatt.ergebnis_angleichung(), "2026B051", lambda: None,
+            nur_ergebnisse=True)
+        saetze = [kind.cget("text") for kind in vorschau.winfo_children()
+                  if isinstance(kind, tk.Label)]
+        assert any("berechneten Groessen" in satz and "noch nicht da" in satz
+                   for satz in saetze), saetze
+        assert vorschau.title().startswith("Ergebnisse angleichen")
+    mit_fenster(pruefen)
+
+
+# ------------------------------------------------ x und X
+
+def test_ein_getipptes_grosses_x_wird_klein():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        blatt._von_hand_geaendert("26B0011", "GMSZ", " X ")
+        assert blatt.vonhand[("26B0011", "GMSZ")] == "x"
+        blatt._block_eingefuegt([("26B0011", "VOLSZ", "X")])
+        assert blatt.vonhand[("26B0011", "VOLSZ")] == "x"
+    mit_fenster(pruefen)
+
+
+def test_anhang_angleichen_macht_aus_grossem_x_ein_kleines():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        kuerzel = next(k for (p, k), zeile in blatt.anhang.items()
+                       if p == "26B0011"
+                       and trdf.zahl(blatt.limsroh["26B0011"].get(k)) is None)
+        blatt.anhang[("26B0011", kuerzel)]["mw"] = "X"
+        geaendert = [eine for eine in blatt.auseinander()
+                     if eine["kuerzel"] == kuerzel]
+        assert len(geaendert) == 1
+        assert geaendert[0]["alt"] == "X"
+        assert geaendert[0]["neu"] == "x"
+        assert trdfexport.anhangsaetze(geaendert)[0]["wert"] == "x"
+        # Ein kleines x am Anhang ist schon richtig.
+        blatt.anhang[("26B0011", kuerzel)]["mw"] = "x"
+        assert not [eine for eine in blatt.auseinander()
+                    if eine["kuerzel"] == kuerzel]
+    mit_fenster(pruefen)
+
+
+def test_ergebnisse_angleichen_macht_aus_grossem_x_ein_kleines():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        _noch_nicht_gerechnet(blatt)
+        # Eine Groesse, die nichts zu rechnen hat, mit grossem X im LIMS.
+        rechnung = blatt.gerechnet("26B0011")
+        leer = [k for k in blatt.folge if not isinstance(rechnung.get(k), D)]
+        if not leer:
+            return                       # in dieser Probe rechnet alles
+        blatt.gebucht["26B0011"][leer[0]] = "X"
+        treffer = [eine for eine in blatt.ergebnis_angleichung()
+                   if eine["kuerzel"] == leer[0]]
+        assert treffer and treffer[0]["neu"] == "x"
+        blatt.gebucht["26B0011"][leer[0]] = "x"
+        assert not [eine for eine in blatt.ergebnis_angleichung()
+                    if eine["kuerzel"] == leer[0]]
+    mit_fenster(pruefen)
+
+
+def test_gross_und_klein_x_gelten_beim_vergleich_gleich():
+    assert trdf.leer("X") and trdf.leer("x")
+    assert not trdfexport.bewegt("X", "x")
+    assert not trdfexport.bewegt("x", "x")
+    assert trdf.marke_klein(" X ") == "x"
+    assert trdf.marke_klein("1,5") == "1,5"
+    # Die Variante raeumt ein X nicht noch einmal auf.
+    werte = {"_TRDV": "1", "GMSZ": "X"}
+    assert "GMSZ" not in trdfrohpruefung.nach_variante(werte, "x")
+
 def test_eine_alte_sicherung_ohne_rohw_id_wird_angesagt():
     """Sie stellt nur die Ergebniszeile zurueck - der Anhang bliebe auf
     dem korrigierten Wert stehen, und niemand saehe es."""

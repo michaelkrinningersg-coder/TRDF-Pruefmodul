@@ -381,6 +381,90 @@ def belegt_zeile(prob_id, wert="0,5") -> tuple:
     return (prob_id, 100, 2, 7, 30, wert)
 
 
+
+def _anmeldung_mit(fehlertext_erst: str):
+    """Ein Verbindungsversuch, der erst scheitert und im Thick Mode geht."""
+    aufrufe, geladen = [], []
+    echt_connect, echt_lade = oracledb.connect, lims_db.lade_client
+    echt_thick = lims_db._thick_aktiv
+
+    def connect(**angaben):
+        aufrufe.append(angaben)
+        if not geladen:
+            raise oracledb.DatabaseError(fehlertext_erst)
+        return Verbindung([], [])
+
+    oracledb.connect = connect
+    lims_db.lade_client = lambda: geladen.append(True)
+    lims_db._thick_aktiv = False
+    try:
+        zugang = lims_db.Zugang("pruefer", "geheim", "LIMS")
+        verbindung = zugang._einzeln()
+        return verbindung, zugang.modus, len(aufrufe), bool(geladen)
+    finally:
+        oracledb.connect, lims_db.lade_client = echt_connect, echt_lade
+        lims_db._thick_aktiv = echt_thick
+
+
+def test_eine_alte_datenbank_laedt_den_client_nach() -> None:
+    _v, modus, versuche, geladen = _anmeldung_mit(
+        "DPY-3010: connections to this database server version are not "
+        "supported by python-oracledb in thin mode")
+    assert geladen and modus == "Thick Mode" and versuche == 2
+
+
+def test_ein_passwort_im_10g_format_laedt_den_client_nach() -> None:
+    """DPY-3015: der Thin Mode kennt den alten Passwort-Verifier nicht."""
+    _v, modus, versuche, geladen = _anmeldung_mit(
+        "DPY-3015: password verifier type 0x939 is not supported by "
+        "python-oracledb in thin mode")
+    assert geladen and modus == "Thick Mode" and versuche == 2
+
+
+def test_ein_falsches_passwort_laedt_keinen_client() -> None:
+    try:
+        _anmeldung_mit("ORA-01017: invalid username/password; logon denied")
+    except oracledb.DatabaseError as fehler:
+        assert "ORA-01017" in str(fehler)
+    else:
+        raise AssertionError("ORA-01017 darf nicht im Thick Mode enden")
+
+
+def test_dpy_3015_wird_erklaert() -> None:
+    text = lims_db.fehlertext(oracledb.DatabaseError(
+        "DPY-3015: password verifier type 0x939 is not supported"))
+    assert "10g" in text and "neues Passwort" in text
+    assert "anderen Account" in text
+
+
+def test_altes_passwort_ohne_client_sagt_was_zu_tun_ist() -> None:
+    """Laesst sich der Client nicht laden, kommt keine rohe Meldung,
+    sondern: neues Passwort holen oder mit einem anderen Account."""
+    echt_connect, echt_lade = oracledb.connect, lims_db.lade_client
+    echt_thick = lims_db._thick_aktiv
+
+    def connect(**angaben):
+        raise oracledb.DatabaseError(
+            "DPY-3015: password verifier type 0x939 is not supported")
+
+    def lade():
+        raise oracledb.DatabaseError("DPI-1047: Cannot locate a 32-bit "
+                                     "Oracle Client library")
+
+    oracledb.connect, lims_db.lade_client = connect, lade
+    lims_db._thick_aktiv = False
+    try:
+        lims_db.Zugang("alt", "geheim", "LIMS")._einzeln()
+    except lims_db.AltesPasswort as fehler:
+        text = lims_db.fehlertext(fehler)
+        assert "neues Passwort" in text and "anderen Account" in text
+        assert "DPI-1047" in text
+    else:
+        raise AssertionError("Ohne Client muss die Anmeldung scheitern")
+    finally:
+        oracledb.connect, lims_db.lade_client = echt_connect, echt_lade
+        lims_db._thick_aktiv = echt_thick
+
 def test_csv_fuer_excel() -> None:
     daten = als_csv(["SERIE", "WERT"], [("2024B017", 1.5), ("2024B018", None)])
     assert daten.startswith(b"\xef\xbb\xbf")          # BOM, damit Excel passt
