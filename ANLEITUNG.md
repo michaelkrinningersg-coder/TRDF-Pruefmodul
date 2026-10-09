@@ -24,7 +24,7 @@ Die Bilder zeigen die Beispielserie 2026B051 mit erfundenen Werten.
 
 ![Mehrere TRDF-Methoden – eine wählen](docs/bilder/02_serie_methode.png)
 
-Ist neben **Abfragen** der Haken **angleichen** gesetzt, wird nach dem Abfragen gleich geprüft, ob Teilprobenanhang oder Ergebnisse vom LIMS abweichen (siehe Abschnitt 7, „Ergebnisse angleichen“). Nur wenn es Unterschiede gibt, öffnet sich die gewohnte Übersicht – erst für den Anhang, danach für die Ergebnisse. Geschrieben wird wie immer erst nach der Bestätigung, mit Sicherung und Protokoll; **Abbrechen** beendet das Angleichen. Der Haken wird gemerkt.
+Ist neben **Abfragen** der Haken **angleichen** gesetzt (von Haus aus ist er gesetzt), wird nach dem Abfragen gleich geprüft, ob Teilprobenanhang oder Ergebnisse vom LIMS abweichen (siehe Abschnitt 7, „Ergebnisse angleichen“). Nur wenn es Unterschiede gibt, öffnet sich die gewohnte Übersicht – erst für den Anhang, danach für die Ergebnisse. Geschrieben wird wie immer erst nach der Bestätigung, mit Sicherung und Protokoll; **Abbrechen** beendet das Angleichen. Der Haken wird gemerkt.
 
 Danach stehen Methode und Probenart oben neben der Überschrift. Die Statuszeile darunter sagt, was gerade passiert.
 

@@ -3039,12 +3039,17 @@ def _vorschauen(fenster):
             if isinstance(kind, trdfreiter.Exportvorschau)]
 
 
-def test_angleichen_nach_dem_abfragen_ist_von_haus_aus_aus():
+def test_angleichen_nach_dem_abfragen_ist_von_haus_aus_an():
     def pruefen(fenster):
-        blatt = seite(fenster, zeilen=(11,))
-        assert not blatt.v_auto_angleichen.get()
-        blatt._auto_angleichen_vormerken()
-        assert blatt._auto_schritte == []
+        with tempfile.TemporaryDirectory() as basis:
+            blatt = seite(fenster, zeilen=(11,), ordner=basis)
+            assert blatt.v_auto_angleichen.get()
+            blatt._auto_angleichen_vormerken()
+            assert blatt._auto_schritte == ["anhang", "ergebnisse"]
+            # Weggenommen ist weggenommen.
+            blatt.v_auto_angleichen.set(False)
+            blatt._auto_angleichen_vormerken()
+            assert blatt._auto_schritte == []
     mit_fenster(pruefen)
 
 
