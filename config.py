@@ -108,7 +108,8 @@ class Config:
         "trdf_berechnete": "aus",
         # Ob nach "Abfragen" gleich angeglichen wird - Anhang und
         # Ergebnisse, jeweils nach der gewohnten Uebersicht ("an"/"aus").
-        "trdf_auto_angleichen": "aus",
+        # Von Haus aus an; wer den Haken wegnimmt, behaelt ihn weg.
+        "trdf_auto_angleichen": "an",
     }
 
     def __init__(self, runtime_dir=None):
