@@ -23,6 +23,7 @@ os.environ["TRDF_DEMO_PROBEN"] = "12"
 
 import config  # noqa: E402
 import lims_db  # noqa: E402
+import trdf  # noqa: E402
 import test_trdfreiter  # noqa: E402
 import trdfbild  # noqa: E402
 import trdfblock  # noqa: E402
@@ -508,6 +509,37 @@ def test_ein_grosses_x_wird_beim_setzen_klein():
     assert bruecke._s.vonhand[("26B0005", "GMSZ")] == "x"
     assert antwort["roh"][0]["w"]["GMSZ"] == "x"
 
+
+
+def test_anhang_angleichen_macht_ein_grosses_x_ueberall_klein():
+    """Ueber die Bruecke: X am Anhang und in der Ergebniszeile werden in
+    einem Zug ein x - mit Sicherung."""
+    bruecke, _voll = geladen()
+    s = bruecke._s
+    probe = s.proben[0][1]
+    kuerzel = next(k for k in s.rohliste
+                   if trdf.zahl(s.limsroh[probe].get(k)) is None
+                   and (probe, k) in s.anhang)
+    s.limsroh[probe][kuerzel] = "X"
+    s.anhang[(probe, kuerzel)]["mw"] = "X"
+    gesehen = {}
+    echt = trdfweb.demo_schreiben
+
+    def merken(saetze, hinweise=None, anhang=None, anhang_hinweise=None,
+               **rest):
+        gesehen["saetze"], gesehen["anhang"] = list(saetze), list(anhang or [])
+        return echt(saetze, hinweise, anhang, anhang_hinweise, **rest)
+
+    vorschau = bruecke.anhang_vorschau()["vorschau"]
+    assert "Ergebniszeile" in vorschau["hinweis"]
+    trdfweb.demo_schreiben = merken
+    try:
+        voll = bruecke.vorschau_ausfuehren()
+    finally:
+        trdfweb.demo_schreiben = echt
+    assert voll["meldung"]["titel"] == "Teilprobenanhang angeglichen"
+    assert any(satz["wert"] == "x" for satz in gesehen["saetze"])
+    assert any(satz["wert"] == "x" for satz in gesehen["anhang"])
 
 def test_nur_bekannte_einstellungen():
     bruecke = api()

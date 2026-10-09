@@ -258,9 +258,12 @@ def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False,
                    "Ergebnistabelle. Der bisherige Wert des Anhangs "
                    "geht wie immer nach MW_OLD, und der Stand von jetzt "
                    f"vorher in den Ordner „{trdfexport.ORDNER}“.")
+        zeilen_x = [eine for eine in aenderungen if eine.get("auch_zeile")]
         if gross:
-            hinweis += (f" {len(gross)} grosse X am Anhang werden zum "
-                        "kleinen x.")
+            hinweis += (f" {len(gross)} grosse X werden zum kleinen x")
+            hinweis += (f" - davon {len(zeilen_x)} auch in der "
+                        "Ergebniszeile; dort wird sonst nichts "
+                        "angefasst." if zeilen_x else ".")
     elif zurueck:
         hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
                    "MW_ROH und MW, der Bearbeitungsstand, das "
@@ -803,24 +806,46 @@ class TrdfModell:
         rechnet es mit einer Zahl, die in der Tabelle nicht steht - und
         niemand sieht es. Zurueck kommen Aenderungen im ueblichen
         Zuschnitt: der Anhang bekommt, was in der Ergebniszeile steht.
+
+        Dazu das grosse X: es gilt wie ein x, geschrieben wird aber das
+        kleine. Steht es am Anhang, wird der Anhang angeglichen; steht es
+        in der Ergebniszeile, wird sie es (`auch_zeile`) - und nur sie,
+        wenn der Anhang schon stimmt (`anhang` ist dann None).
         """
         gefunden = []
         for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
-            for kuerzel, (zeile, am_anhang) in sorted(
-                    self._anhangvergleich(probe).items()):
-                if trdf.zahl(zeile) is None and trdf.ist_grosses_x(am_anhang):
-                    # Ein grosses X am Anhang wird beim Angleichen klein -
-                    # gleich gilt es ohnehin, geschrieben wird das x.
-                    gefunden.append(self._aenderung(
-                        {"lnr": lnr, "probe": probe}, kuerzel,
-                        trdfexport.ROHWERT, am_anhang, trdf.MARKE))
+            eckdaten = {"lnr": lnr, "probe": probe}
+            vergleich = self._anhangvergleich(probe)
+            for kuerzel in sorted(self.rohliste):
+                if (probe, kuerzel) in self.vonhand:
                     continue
-                if trdf.zahl(zeile) is None or trdf.zahl(zeile) == trdf.zahl(
-                        am_anhang):
-                    continue
-                gefunden.append(self._aenderung(
-                    {"lnr": lnr, "probe": probe}, kuerzel,
-                    trdfexport.ROHWERT, am_anhang, trdf.zahl(zeile)))
+                in_zeile = self.limsroh.get(probe, {}).get(kuerzel)
+                zeile_gross = trdf.ist_grosses_x(in_zeile)
+                if kuerzel in vergleich:
+                    zeile, am_anhang = vergleich[kuerzel]
+                    if trdf.zahl(zeile) is None and \
+                            trdf.ist_grosses_x(am_anhang):
+                        eine = self._aenderung(eckdaten, kuerzel,
+                                               trdfexport.ROHWERT, am_anhang,
+                                               trdf.MARKE)
+                        eine["auch_zeile"] = zeile_gross
+                        gefunden.append(eine)
+                        continue
+                    if trdf.zahl(zeile) is not None and \
+                            trdf.zahl(zeile) != trdf.zahl(am_anhang):
+                        gefunden.append(self._aenderung(
+                            eckdaten, kuerzel, trdfexport.ROHWERT, am_anhang,
+                            trdf.zahl(zeile)))
+                        continue
+                if zeile_gross:
+                    # Nur die Ergebniszeile: der Anhang stimmt schon (oder
+                    # es gibt keinen).
+                    eine = self._aenderung(eckdaten, kuerzel,
+                                           trdfexport.ROHWERT, in_zeile,
+                                           trdf.MARKE)
+                    eine["anhang"] = None
+                    eine["auch_zeile"] = True
+                    gefunden.append(eine)
         return gefunden
 
     def ergebnis_angleichung(self) -> list:

@@ -909,15 +909,29 @@ class Api:
                         f"„{ordner}“ liess sich nicht anlegen."}}
         anhang = trdfexport.anhangsaetze(geaendert)
         hinweise = trdfexport.anhanghinweise(geaendert, serie)
-        bericht = self._schreiben(zugang, [], None, anhang, hinweise)
-        trdfexport.protokollieren(ordner, getattr(zugang, "benutzer", ""),
-                                  anhang, hinweise,
+        # Die Ergebniszeile ist sonst die Vorlage und bleibt - ausser dort,
+        # wo ein grosses X steht: das wird ein kleines.
+        in_zeile = [eine for eine in geaendert if eine.get("auch_zeile")]
+        saetze = trdfexport.saetze(in_zeile)
+        zeilenhinweise = trdfexport.hinweise(in_zeile, serie)
+        bericht = self._schreiben(zugang, saetze, zeilenhinweise, anhang,
+                                  hinweise)
+        benutzer = getattr(zugang, "benutzer", "")
+        trdfexport.protokollieren(ordner, benutzer, anhang, hinweise,
                                   sql=lims_db.trdf_anhang_sql())
+        if saetze:
+            trdfexport.protokollieren(ordner, benutzer, saetze,
+                                      zeilenhinweise)
         getroffen = bericht.get("anhang_geschrieben", 0)
-        fehlt = len(bericht.get("anhang_ohne_zeile", ()))
-        offen = len(bericht.get("anhang_nicht_uebernommen", ()))
+        fehlt = (len(bericht.get("anhang_ohne_zeile", ()))
+                 + len(bericht.get("ohne_zeile", ())))
+        offen = (len(bericht.get("anhang_nicht_uebernommen", ()))
+                 + len(bericht.get("nicht_uebernommen", ())))
         satz = (f"{getroffen} Rohwerte am Teilprobenanhang angeglichen  |  "
                 f"Sicherung: {sicherung}")
+        if saetze:
+            satz += (f"  |  {bericht.get('geschrieben', 0)} x in der "
+                     f"Ergebniszeile klein geschrieben")
         if fehlt:
             satz += f"  |  {fehlt} Zeilen nicht gefunden"
         if offen:

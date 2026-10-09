@@ -669,8 +669,25 @@ class TrdfSeite(tk.Frame, TrdfModell):
         aendert, sieht oben dieselbe Probe.
         """
         self.arbeitszeile = str(probe)
+        self._block_folgen(self.arbeitszeile)
         self._auswahl_stellen()
         self._mitgehen()
+
+    def _block_folgen(self, probe: str):
+        """Eine andere Zeile gewaehlt: der zuletzt geoeffnete Block zeigt sie.
+
+        Steht die Probe schon in einem eigenen Block, bleibt alles, wie es
+        ist - zwei gleiche waeren nur verwirrend.
+        """
+        offen = [name for name, fenster in self.bloecke.items()
+                 if fenster is not None and fenster.winfo_exists()]
+        if not offen or probe in offen or \
+                probe not in {name for _lnr, name in self.proben}:
+            return
+        block = self.bloecke.pop(offen[-1])
+        self.bloecke[probe] = block
+        block.uebernehmen(probe, self.rohsatz(probe), self.gerechnet(probe))
+        self._auswahl_stellen()
 
     def _mitgehen(self):
         """Die berechneten Tabellen zur Arbeitszeile rollen."""
@@ -1398,7 +1415,11 @@ class TrdfSeite(tk.Frame, TrdfModell):
         Grossansicht auf die Probennummer klickt, will den Block nicht
         dahinter verschwinden sehen.
         """
-        if spalte not in ("Probe", "Probe-Nr.") or not zeile:
+        if not zeile:
+            return
+        if spalte not in ("Probe", "Probe-Nr."):
+            # Ein Klick in eine andere Zelle: ein offener Block geht mit.
+            self._block_folgen(zeile)
             return
         vorhandenes = self.bloecke.get(zeile)
         if vorhandenes is not None and vorhandenes.winfo_exists():
@@ -1638,26 +1659,37 @@ class TrdfSeite(tk.Frame, TrdfModell):
             return
         anhang = trdfexport.anhangsaetze(geaendert)
         hinweise = trdfexport.anhanghinweise(geaendert, serie)
+        # Die Ergebniszeile ist sonst die Vorlage und bleibt - ausser dort,
+        # wo ein grosses X steht: das wird ein kleines.
+        in_zeile = [eine for eine in geaendert if eine.get("auch_zeile")]
+        saetze = trdfexport.saetze(in_zeile)
+        zeilenhinweise = trdfexport.hinweise(in_zeile, serie)
         self._melden(f"Sicherung: {sicherung}  |  {len(anhang)} Rohwerte am "
-                     f"Anhang werden angeglichen ...")
+                     f"Anhang und {len(saetze)} in der Ergebniszeile werden "
+                     f"angeglichen ...")
         self.update_idletasks()
 
         def arbeit():
-            # Ohne Ergebnissaetze: die Ergebniszeile ist die Vorlage und
-            # wird nicht angefasst.
-            return lims_db.trdf_exportieren(zugang, [], None, anhang,
-                                            hinweise)
+            return lims_db.trdf_exportieren(zugang, saetze, zeilenhinweise,
+                                            anhang, hinweise)
 
         def fertig(bericht):
-            trdfexport.protokollieren(ordner,
-                                      getattr(zugang, "benutzer", ""),
-                                      anhang, hinweise,
+            benutzer = getattr(zugang, "benutzer", "")
+            trdfexport.protokollieren(ordner, benutzer, anhang, hinweise,
                                       sql=lims_db.trdf_anhang_sql())
+            if saetze:
+                trdfexport.protokollieren(ordner, benutzer, saetze,
+                                          zeilenhinweise)
             getroffen = bericht.get("anhang_geschrieben", 0)
             fehlt = len(bericht.get("anhang_ohne_zeile", ()))
             offen = len(bericht.get("anhang_nicht_uebernommen", ()))
             satz = (f"{getroffen} Rohwerte am Teilprobenanhang angeglichen"
                     f"  |  Sicherung: {sicherung}")
+            if saetze:
+                satz += (f"  |  {bericht.get('geschrieben', 0)} x in der "
+                         f"Ergebniszeile klein geschrieben")
+            fehlt += len(bericht.get("ohne_zeile", ()))
+            offen += len(bericht.get("nicht_uebernommen", ()))
             if fehlt:
                 satz += f"  |  {fehlt} Zeilen nicht gefunden"
             if offen:

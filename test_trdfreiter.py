@@ -2923,6 +2923,85 @@ def test_anhang_angleichen_macht_aus_grossem_x_ein_kleines():
     mit_fenster(pruefen)
 
 
+def _rohwert_ohne_zahl(blatt, probe="26B0011"):
+    """Ein Rohwert dieser Probe, der im LIMS keine Zahl traegt (x)."""
+    return next(k for k in blatt.rohliste
+                if trdf.zahl(blatt.limsroh[probe].get(k)) is None
+                and (probe, k) in blatt.anhang)
+
+
+def test_ein_grosses_x_in_der_ergebniszeile_wird_dort_klein():
+    """Rohwert mit X in der Ergebniszeile, x am Anhang: nur die
+    Ergebniszeile wird geschrieben."""
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        kuerzel = _rohwert_ohne_zahl(blatt)
+        blatt.limsroh["26B0011"][kuerzel] = "X"
+        blatt.anhang[("26B0011", kuerzel)]["mw"] = "x"
+        treffer = [eine for eine in blatt.auseinander()
+                   if eine["kuerzel"] == kuerzel]
+        assert len(treffer) == 1
+        eine = treffer[0]
+        assert eine["auch_zeile"] and eine["anhang"] is None
+        assert eine["alt"] == "X" and eine["neu"] == "x"
+        assert trdfexport.anhangsaetze(treffer) == []
+        assert trdfexport.saetze(treffer)[0]["wert"] == "x"
+    mit_fenster(pruefen)
+
+
+def test_grosses_x_an_beiden_stellen_wird_in_einem_zug_klein():
+    def pruefen(fenster):
+        gemerkt = {}
+
+        def exportieren(zugang, saetze, hinweise=None, anhang=None,
+                        anhang_hinweise=None, zurueck=False, leeren=False):
+            gemerkt["saetze"] = list(saetze)
+            gemerkt["anhang"] = list(anhang or [])
+            return {"geschrieben": len(saetze), "ohne_zeile": [],
+                    "versucht": len(saetze),
+                    "anhang_geschrieben": len(anhang or []),
+                    "anhang_ohne_zeile": [], "nicht_uebernommen": [],
+                    "anhang_nicht_uebernommen": []}
+
+        echt = trdfreiter.lims_db.trdf_exportieren
+        trdfreiter.lims_db.trdf_exportieren = exportieren
+        try:
+            with tempfile.TemporaryDirectory() as basis:
+                blatt = seite(fenster, zeilen=(11,), ordner=basis)
+                blatt._im_hintergrund = (
+                    lambda arbeit, fertig, schief: fertig(arbeit()))
+                blatt._abrufen = lambda: None
+                kuerzel = _rohwert_ohne_zahl(blatt)
+                blatt.limsroh["26B0011"][kuerzel] = "X"
+                blatt.anhang[("26B0011", kuerzel)]["mw"] = "X"
+                geaendert = [eine for eine in blatt.auseinander()
+                             if eine["kuerzel"] == kuerzel]
+                assert len(geaendert) == 1 and geaendert[0]["auch_zeile"]
+                blatt._anhang_schreiben(geaendert)
+                assert os.listdir(os.path.join(basis, trdfexport.ORDNER))
+        finally:
+            trdfreiter.lims_db.trdf_exportieren = echt
+        assert [satz["wert"] for satz in gemerkt["saetze"]] == ["x"]
+        assert [satz["wert"] for satz in gemerkt["anhang"]] == ["x"]
+    mit_fenster(pruefen)
+
+
+def test_der_block_folgt_der_gewaehlten_zeile():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(5, 11))
+        blatt._block_zeigen("26B0005", "Probe")
+        block = blatt.bloecke["26B0005"]
+        # Ein Klick in eine andere Zelle einer anderen Zeile ...
+        blatt._block_zeigen("26B0011", "TRD_TRDF LIMS")
+        assert list(blatt.bloecke) == ["26B0011"]
+        assert blatt.bloecke["26B0011"] is block
+        assert block.probe == "26B0011"
+        # ... und Tippen in einer Zeile nimmt ihn genauso mit.
+        blatt._arbeitszeile_setzen("26B0005")
+        assert block.probe == "26B0005"
+        block.destroy()
+    mit_fenster(pruefen)
+
 def test_ergebnisse_angleichen_macht_aus_grossem_x_ein_kleines():
     def pruefen(fenster):
         blatt = seite(fenster, zeilen=(11,))
