@@ -886,8 +886,25 @@ class TrdfSeite(tk.Frame):
         aendert, sieht oben dieselbe Probe.
         """
         self.arbeitszeile = str(probe)
+        self._block_folgen(self.arbeitszeile)
         self._auswahl_stellen()
         self._mitgehen()
+
+    def _block_folgen(self, probe: str):
+        """Eine andere Zeile gewaehlt: der zuletzt geoeffnete Block zeigt sie.
+
+        Steht die Probe schon in einem eigenen Block, bleibt alles, wie es
+        ist - zwei gleiche waeren nur verwirrend.
+        """
+        offen = [name for name, fenster in self.bloecke.items()
+                 if fenster is not None and fenster.winfo_exists()]
+        if not offen or probe in offen or \
+                probe not in {name for _lnr, name in self.proben}:
+            return
+        block = self.bloecke.pop(offen[-1])
+        self.bloecke[probe] = block
+        block.uebernehmen(probe, self.rohsatz(probe), self.gerechnet(probe))
+        self._auswahl_stellen()
 
     def _mitgehen(self):
         """Die berechneten Tabellen zur Arbeitszeile rollen."""
@@ -2228,24 +2245,46 @@ class TrdfSeite(tk.Frame):
         rechnet es mit einer Zahl, die in der Tabelle nicht steht - und
         niemand sieht es. Zurueck kommen Aenderungen im ueblichen
         Zuschnitt: der Anhang bekommt, was in der Ergebniszeile steht.
+
+        Dazu das grosse X: es gilt wie ein x, geschrieben wird aber das
+        kleine. Steht es am Anhang, wird der Anhang angeglichen; steht es
+        in der Ergebniszeile, wird sie es (`auch_zeile`) - und nur sie,
+        wenn der Anhang schon stimmt (`anhang` ist dann None).
         """
         gefunden = []
         for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
-            for kuerzel, (zeile, am_anhang) in sorted(
-                    self._anhangvergleich(probe).items()):
-                if trdf.zahl(zeile) is None and trdf.ist_grosses_x(am_anhang):
-                    # Ein grosses X am Anhang wird beim Angleichen klein -
-                    # gleich gilt es ohnehin, geschrieben wird das x.
-                    gefunden.append(self._aenderung(
-                        {"lnr": lnr, "probe": probe}, kuerzel,
-                        trdfexport.ROHWERT, am_anhang, trdf.MARKE))
+            eckdaten = {"lnr": lnr, "probe": probe}
+            vergleich = self._anhangvergleich(probe)
+            for kuerzel in sorted(self.rohliste):
+                if (probe, kuerzel) in self.vonhand:
                     continue
-                if trdf.zahl(zeile) is None or trdf.zahl(zeile) == trdf.zahl(
-                        am_anhang):
-                    continue
-                gefunden.append(self._aenderung(
-                    {"lnr": lnr, "probe": probe}, kuerzel,
-                    trdfexport.ROHWERT, am_anhang, trdf.zahl(zeile)))
+                in_zeile = self.limsroh.get(probe, {}).get(kuerzel)
+                zeile_gross = trdf.ist_grosses_x(in_zeile)
+                if kuerzel in vergleich:
+                    zeile, am_anhang = vergleich[kuerzel]
+                    if trdf.zahl(zeile) is None and \
+                            trdf.ist_grosses_x(am_anhang):
+                        eine = self._aenderung(eckdaten, kuerzel,
+                                               trdfexport.ROHWERT, am_anhang,
+                                               trdf.MARKE)
+                        eine["auch_zeile"] = zeile_gross
+                        gefunden.append(eine)
+                        continue
+                    if trdf.zahl(zeile) is not None and \
+                            trdf.zahl(zeile) != trdf.zahl(am_anhang):
+                        gefunden.append(self._aenderung(
+                            eckdaten, kuerzel, trdfexport.ROHWERT, am_anhang,
+                            trdf.zahl(zeile)))
+                        continue
+                if zeile_gross:
+                    # Nur die Ergebniszeile: der Anhang stimmt schon (oder
+                    # es gibt keinen).
+                    eine = self._aenderung(eckdaten, kuerzel,
+                                           trdfexport.ROHWERT, in_zeile,
+                                           trdf.MARKE)
+                    eine["anhang"] = None
+                    eine["auch_zeile"] = True
+                    gefunden.append(eine)
         return gefunden
 
     def rohblatt(self) -> list:
@@ -2574,7 +2613,11 @@ class TrdfSeite(tk.Frame):
         Grossansicht auf die Probennummer klickt, will den Block nicht
         dahinter verschwinden sehen.
         """
-        if spalte not in ("Probe", "Probe-Nr.") or not zeile:
+        if not zeile:
+            return
+        if spalte not in ("Probe", "Probe-Nr."):
+            # Ein Klick in eine andere Zelle: ein offener Block geht mit.
+            self._block_folgen(zeile)
             return
         vorhandenes = self.bloecke.get(zeile)
         if vorhandenes is not None and vorhandenes.winfo_exists():
@@ -2844,26 +2887,37 @@ class TrdfSeite(tk.Frame):
             return
         anhang = trdfexport.anhangsaetze(geaendert)
         hinweise = trdfexport.anhanghinweise(geaendert, serie)
+        # Die Ergebniszeile ist sonst die Vorlage und bleibt - ausser dort,
+        # wo ein grosses X steht: das wird ein kleines.
+        in_zeile = [eine for eine in geaendert if eine.get("auch_zeile")]
+        saetze = trdfexport.saetze(in_zeile)
+        zeilenhinweise = trdfexport.hinweise(in_zeile, serie)
         self._melden(f"Sicherung: {sicherung}  |  {len(anhang)} Rohwerte am "
-                     f"Anhang werden angeglichen ...")
+                     f"Anhang und {len(saetze)} in der Ergebniszeile werden "
+                     f"angeglichen ...")
         self.update_idletasks()
 
         def arbeit():
-            # Ohne Ergebnissaetze: die Ergebniszeile ist die Vorlage und
-            # wird nicht angefasst.
-            return lims_db.trdf_exportieren(zugang, [], None, anhang,
-                                            hinweise)
+            return lims_db.trdf_exportieren(zugang, saetze, zeilenhinweise,
+                                            anhang, hinweise)
 
         def fertig(bericht):
-            trdfexport.protokollieren(ordner,
-                                      getattr(zugang, "benutzer", ""),
-                                      anhang, hinweise,
+            benutzer = getattr(zugang, "benutzer", "")
+            trdfexport.protokollieren(ordner, benutzer, anhang, hinweise,
                                       sql=lims_db.trdf_anhang_sql())
+            if saetze:
+                trdfexport.protokollieren(ordner, benutzer, saetze,
+                                          zeilenhinweise)
             getroffen = bericht.get("anhang_geschrieben", 0)
             fehlt = len(bericht.get("anhang_ohne_zeile", ()))
             offen = len(bericht.get("anhang_nicht_uebernommen", ()))
             satz = (f"{getroffen} Rohwerte am Teilprobenanhang angeglichen"
                     f"  |  Sicherung: {sicherung}")
+            if saetze:
+                satz += (f"  |  {bericht.get('geschrieben', 0)} x in der "
+                         f"Ergebniszeile klein geschrieben")
+            fehlt += len(bericht.get("ohne_zeile", ()))
+            offen += len(bericht.get("nicht_uebernommen", ()))
             if fehlt:
                 satz += f"  |  {fehlt} Zeilen nicht gefunden"
             if offen:
@@ -3410,9 +3464,13 @@ class Exportvorschau(tk.Toplevel):
                        f"vorher in den Ordner „{trdfexport.ORDNER}“.")
             gross = [eine for eine in self.aenderungen
                      if trdf.ist_grosses_x(eine.get("alt"))]
+            zeilen_x = [eine for eine in self.aenderungen
+                        if eine.get("auch_zeile")]
             if gross:
-                hinweis += (f" {len(gross)} grosse X am Anhang werden zum "
-                            "kleinen x.")
+                hinweis += (f" {len(gross)} grosse X werden zum kleinen x")
+                hinweis += (f" - davon {len(zeilen_x)} auch in der "
+                            "Ergebniszeile; dort wird sonst nichts "
+                            "angefasst." if zeilen_x else ".")
         elif zurueck:
             hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
                        "MW_ROH und MW, der Bearbeitungsstand, das "

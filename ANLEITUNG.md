@@ -102,7 +102,7 @@ Ein **Klick auf die Probennummer** öffnet den Block der Probe als eigenes Fenst
 * In der Mitte die Zahlen, aus denen gerechnet wird.
 * Darunter die Legende: je Lage eine Zeile, die Prozente untereinander. Dieselbe Lage steht bei Probe und Schaufelprobe in derselben Zeile.
 
-Der Block **rechnet bei jeder Eingabe live mit**. **Pfeil hoch/runter** blättert zur nächsten Probe.
+Der Block **rechnet bei jeder Eingabe live mit**. **Pfeil hoch/runter** blättert zur nächsten Probe. Wer in einer Tabelle in eine andere Zeile klickt oder tippt, nimmt den zuletzt geöffneten Block mit.
 
 ![Zusammensetzungsblock](docs/bilder/07_block.png)
 
@@ -178,7 +178,7 @@ Ist eine Serie im LIMS noch nicht gerechnet, steht im Reiter **Ergebnisse** in d
 
 Wie beim Export kommt zuerst die **Übersicht** zur Bestätigung, dann die **Sicherung** in `trdf_backup`; jede UPDATE-Anweisung wird protokolliert, danach wird nachgelesen. Gibt es noch von Hand geänderte Rohwerte, erst über **Export** schreiben, dann angleichen.
 
-**Anhang angleichen** (Reiter Rohwerte) bringt umgekehrt den Teilprobenanhang auf den Stand der Ergebniszeile; auch dort wird ein großes `X` zum kleinen `x`.
+**Anhang angleichen** (Reiter Rohwerte) bringt umgekehrt den Teilprobenanhang auf den Stand der Ergebniszeile. Ein großes `X` bei einem Rohwert wird dabei zum kleinen `x` – am Anhang und in der Ergebniszeile; sonst bleibt die Ergebniszeile, wie sie ist.
 
 ### Rückgängig machen
 
