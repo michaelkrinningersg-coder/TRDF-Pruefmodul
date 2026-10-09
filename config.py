@@ -106,6 +106,9 @@ class Config:
         # Ob ueber den Rohwerten die berechneten Groessen aufgeklappt
         # stehen ("an") oder nicht ("aus").
         "trdf_berechnete": "aus",
+        # Ob nach "Abfragen" gleich angeglichen wird - Anhang und
+        # Ergebnisse, jeweils nach der gewohnten Uebersicht ("an"/"aus").
+        "trdf_auto_angleichen": "aus",
     }
 
     def __init__(self, runtime_dir=None):
