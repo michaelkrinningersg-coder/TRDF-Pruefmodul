@@ -1,7 +1,7 @@
 <script>
   // Anmeldung wie in LabControl: Oracle-Benutzer, Passwort, Datenbank -
   // und die Datenbank ist LIMS. Das Passwort wird nirgends gespeichert.
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   let { start, onAnmelden } = $props();
   const anfang = untrack(() => start);
   let benutzer = $state(anfang.benutzer ?? "");
@@ -12,8 +12,11 @@
   let feldBenutzer = $state(null);
   let feldPasswort = $state(null);
 
-  $effect(() => {
-    (benutzer ? feldPasswort : feldBenutzer)?.focus();
+  // Nur einmal beim Oeffnen: mit gemerktem Benutzer ins Passwort, sonst
+  // in den Benutzer. Ein $effect, der `benutzer` liest, liefe bei jedem
+  // Tastendruck wieder - und sprang mitten im Namen ins Passwortfeld.
+  onMount(() => {
+    (anfang.benutzer ? feldPasswort : feldBenutzer)?.focus();
   });
 
   async function anmelden(e) {

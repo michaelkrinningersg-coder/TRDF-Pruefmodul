@@ -25,7 +25,9 @@ Gelegenheit, in die falsche zu schreiben.
   * Thin Mode (Standard): python-oracledb spricht das Oracle-Protokoll direkt
     ueber TCP. Kein Oracle-Client noetig, setzt aber Datenbank 12.1+ voraus.
   * Thick Mode: wird automatisch nachgeladen, sobald die Datenbank fuer den
-    Thin Mode zu alt ist (Fehler DPY-3010). Dafuer muss das Programm dieselbe
+    Thin Mode zu alt ist (Fehler DPY-3010) oder das Passwort eines Benutzers
+    noch im alten 10g-Format gespeichert ist, das der Thin Mode nicht lesen
+    kann (Fehler DPY-3015). Dafuer muss das Programm dieselbe
     Bitness haben wie der Client unter C:\\Oracle\\11.2.0 - der ist 32-bit,
     also die x86-Variante der exe verwenden.
 
@@ -330,15 +332,52 @@ class Zugang:
             verbindung = oracledb.connect(user=self.benutzer, password=self.passwort,
                                           dsn=dsn)
         except oracledb.Error as fehler:
-            if _thick_aktiv or "DPY-3010" not in str(fehler):
+            if _thick_aktiv or not braucht_thick(fehler):
                 raise
-            # Datenbank ist aelter als 12.1 -> Oracle Client nachladen.
-            lade_client()
+            # Datenbank aelter als 12.1, oder ein Passwort im alten
+            # 10g-Format -> Oracle Client nachladen. Mit ihm geht auch das
+            # alte Passwort - so meldet sich das LIMS selbst an.
+            try:
+                lade_client()
+            except Exception as client_fehler:            # noqa: BLE001
+                if "DPY-3015" in str(fehler):
+                    raise AltesPasswort(client_fehler) from client_fehler
+                raise
             _thick_aktiv = True
             verbindung = oracledb.connect(user=self.benutzer, password=self.passwort,
                                           dsn=dsn)
         self.modus = "Thick Mode" if _thick_aktiv else "Thin Mode"
         return verbindung
+
+
+# Was der Thin Mode nicht kann - und der nachgeladene Oracle Client schon:
+#   DPY-3010  die Datenbank ist aelter als 12.1,
+#   DPY-3015  das Passwort des Benutzers ist nur im alten 10g-Format
+#             gespeichert (Passwort-Verifier 0x939). Das betrifft einzelne
+#             Konten, deren Passwort seit Oracle 10g nicht mehr neu gesetzt
+#             wurde; dauerhaft beheben laesst es sich, indem die DBA das
+#             Passwort neu setzt (dann entsteht ein 11g/12c-Verifier).
+THICK_GRUENDE = ("DPY-3010", "DPY-3015")
+
+
+class AltesPasswort(Exception):
+    """Das Passwort steht im alten 10g-Format, und ohne Client geht es nicht."""
+
+    def __init__(self, client_fehler=None):
+        grund = f" ({client_fehler})" if client_fehler else ""
+        super().__init__(
+            "Das Passwort dieses Kontos ist in der Datenbank noch im alten "
+            "Oracle-10g-Format gespeichert (DPY-3015). Ohne Oracle Client "
+            "kann das Programm es nicht pruefen, und der Client unter "
+            f"C:\\Oracle\\11.2.0 liess sich nicht laden{grund}.\n\n"
+            "Bitte ein neues Passwort setzen lassen und danach neu anmelden "
+            "- oder mit einem anderen Account anmelden.")
+
+
+def braucht_thick(fehler: Exception) -> bool:
+    """Ob dieser Fehler nur heisst: im Thin Mode geht es nicht."""
+    text = str(fehler)
+    return any(grund in text for grund in THICK_GRUENDE)
 
 
 # Falsche Zugangsdaten sind kein Grund, es ohne Vorrat noch einmal zu
@@ -537,6 +576,13 @@ def fehlertext(fehler: Exception) -> str:
     else:
         text = str(fehler)
 
+    if "DPY-3015" in text and not isinstance(fehler, AltesPasswort):
+        text += (
+            "\n\nDas Passwort dieses Kontos ist in der Datenbank noch im "
+            "alten Oracle-10g-Format gespeichert. Bitte ein neues Passwort "
+            "setzen lassen und danach neu anmelden - oder mit einem anderen "
+            "Account anmelden."
+        )
     if "DPI-1047" in text or "DPI-1072" in text:
         pfade = ", ".join(CLIENT_PFADE) or "(kein Pfad konfiguriert)"
         text += (

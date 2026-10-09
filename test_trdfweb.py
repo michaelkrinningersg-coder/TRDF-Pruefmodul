@@ -477,6 +477,38 @@ def test_ein_paar_wandert_zusammen_und_feste_bleiben():
     assert antwort["stand"]["art"] == "warn"
 
 
+def test_ergebnisse_angleichen_ueber_die_bruecke():
+    bruecke, _voll = geladen()
+    s = bruecke._s
+    probe = s.proben[0][1]
+    for kuerzel in s.folge:
+        s.gebucht.setdefault(probe, {})[kuerzel] = None
+    s._rechnung_vergessen()
+    vorschau = json_tauglich(bruecke.ergebnisse_vorschau())["vorschau"]
+    assert vorschau["art"] == "ergebnisse"
+    assert vorschau["knopf"] == "Angleichen"
+    assert "berechneten Groessen" in vorschau["hinweis"]
+    voll = bruecke.vorschau_ausfuehren()
+    assert voll["meldung"]["titel"] == "In das LIMS geschrieben"
+    assert os.path.isfile(bruecke._s.letzter_export["sicherung"])
+    assert bruecke.ergebnisse_vorschau()["stand"]["text"].startswith(
+        "Die Ergebnisse im LIMS stimmen")
+
+
+def test_ergebnisse_angleichen_erst_nach_dem_export_der_handwerte():
+    bruecke, _voll = geladen()
+    bruecke.setzen([["26B0005", "GMSZ", "850"]], "tippen")
+    antwort = bruecke.ergebnisse_vorschau()
+    assert "zuerst" in antwort["stand"]["text"]
+
+
+def test_ein_grosses_x_wird_beim_setzen_klein():
+    bruecke, _voll = geladen()
+    antwort = bruecke.setzen([["26B0005", "GMSZ", "X"]], "tippen")
+    assert bruecke._s.vonhand[("26B0005", "GMSZ")] == "x"
+    assert antwort["roh"][0]["w"]["GMSZ"] == "x"
+
+
 def test_nur_bekannte_einstellungen():
     bruecke = api()
     assert bruecke.einstellung("trdf_berechnete", "an")["ok"]

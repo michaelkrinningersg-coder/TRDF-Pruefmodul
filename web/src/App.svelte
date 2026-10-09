@@ -346,6 +346,12 @@
     if (antwort.vorschau) vorschau = antwort.vorschau;
     else if (antwort.stand) meldungZeile.roh = antwort.stand;
   }
+  async function ergebnisseVorschau() {
+    const antwort = await mit(() => rufe("ergebnisse_vorschau"));
+    if (!antwort || !fehlerFrei(antwort)) return;
+    if (antwort.vorschau) vorschau = antwort.vorschau;
+    else if (antwort.stand) meldungZeile.ergebnis = antwort.stand;
+  }
   async function backupWaehlen() {
     const antwort = await mit(() => rufe("backup_waehlen"));
     if (!antwort || !fehlerFrei(antwort)) return;
@@ -626,6 +632,8 @@
         <div class="leiste">
           <button class="knopf klein" onclick={() => legendeZeigen("ergebnis")} disabled={!tafeln} type="button">Info</button>
           <button class="knopf klein" onclick={() => csv("ergebnis", "ergebnis")} disabled={!tafeln} type="button">Ergebnisblatt CSV</button>
+          <button class="knopf klein" onclick={ergebnisseVorschau} disabled={!tafeln} type="button"
+            title="Die berechneten Größen in die Ergebniszeilen des LIMS schreiben – wo dort noch x oder etwas anderes steht; großes X wird kleines x. Mit Übersicht und Sicherung wie beim Export.">Ergebnisse angleichen</button>
           <label class="schalter" title="Proben, deren Variante x ist, nur in der Anzeige weglassen - geschrieben werden sie trotzdem"><input type="checkbox" bind:checked={ohneX} /> Variante x ausblenden{anzahlX ? ` (${anzahlX})` : ""}</label>
           <Info text={ERKLAERUNG.ergebnis} />
           <span class="stand {(meldungZeile.ergebnis ?? tafeln?.ergebnis.stand)?.art}">

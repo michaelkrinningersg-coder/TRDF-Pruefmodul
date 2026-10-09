@@ -220,7 +220,8 @@ def zahltext(wert, stellen=STELLEN) -> str:
     return str(gerundet).replace(".", ",")
 
 
-def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False) -> str:
+def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False,
+                    nur_ergebnisse=False) -> str:
     """Was ueber der Uebersicht vor dem Schreiben steht.
 
     Dieselben Saetze in beiden Oberflaechen: was geschrieben wird, wohin
@@ -229,7 +230,26 @@ def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False) -> str:
     ohne = trdfexport.ohne_zeile(aenderungen)
     wieder = [] if zurueck or nur_anhang else trdfexport.schon_korrigiert(
         aenderungen)
-    if nur_anhang:
+    gross = [eine for eine in aenderungen
+             if trdf.ist_grosses_x(eine.get("alt"))]
+    if nur_ergebnisse:
+        leer = [eine for eine in aenderungen
+                if not str(eine.get("alt") or "").strip()
+                or trdf.zahl(eine.get("alt")) is None]
+        hinweis = ("Geschrieben werden die berechneten Groessen: in "
+                   "ERGEBNISSE MW_ROH und MW mit dem Wert, den das "
+                   "Pruefmodul aus den Rohwerten im LIMS rechnet, dazu "
+                   f"FC8 = „{lims_db.TRDF_FC8}“, der Bearbeitungsstand "
+                   "und das Korrekturkennzeichen. Rohwerte und "
+                   "Teilprobenanhang werden nicht angefasst. "
+                   f"{len(leer)} Werte stehen im LIMS noch nicht da, "
+                   f"{len(aenderungen) - len(leer)} stehen dort anders. "
+                   "Der Stand von jetzt geht vorher in den Ordner "
+                   f"„{trdfexport.ORDNER}“.")
+        if gross:
+            hinweis += (f" Darunter {len(gross)} grosse X, die zum "
+                        "kleinen x werden.")
+    elif nur_anhang:
         hinweis = ("Geschrieben wird nur der Teilprobenanhang: er "
                    "bekommt den Wert, der in der Ergebniszeile steht. "
                    "Die Ergebniszeile selbst wird nicht angefasst - sie "
@@ -238,6 +258,9 @@ def vorschauhinweis(aenderungen, zurueck=False, nur_anhang=False) -> str:
                    "Ergebnistabelle. Der bisherige Wert des Anhangs "
                    "geht wie immer nach MW_OLD, und der Stand von jetzt "
                    f"vorher in den Ordner „{trdfexport.ORDNER}“.")
+        if gross:
+            hinweis += (f" {len(gross)} grosse X am Anhang werden zum "
+                        "kleinen x.")
     elif zurueck:
         hinweis = ("Wiederhergestellt wird der ganze Stand von damals: "
                    "MW_ROH und MW, der Bearbeitungsstand, das "
@@ -497,7 +520,7 @@ class TrdfModell:
                         str(self.limsroh.get(probe, {}).get(kuerzel)
                             or "").strip():
                     continue
-                self.vonhand[(probe, kuerzel)] = str(wert).strip()
+                self.vonhand[(probe, kuerzel)] = trdf.marke_klein(wert)
                 vorgemerkt += 1
         return vorgemerkt
 
@@ -785,12 +808,48 @@ class TrdfModell:
         for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
             for kuerzel, (zeile, am_anhang) in sorted(
                     self._anhangvergleich(probe).items()):
+                if trdf.zahl(zeile) is None and trdf.ist_grosses_x(am_anhang):
+                    # Ein grosses X am Anhang wird beim Angleichen klein -
+                    # gleich gilt es ohnehin, geschrieben wird das x.
+                    gefunden.append(self._aenderung(
+                        {"lnr": lnr, "probe": probe}, kuerzel,
+                        trdfexport.ROHWERT, am_anhang, trdf.MARKE))
+                    continue
                 if trdf.zahl(zeile) is None or trdf.zahl(zeile) == trdf.zahl(
                         am_anhang):
                     continue
                 gefunden.append(self._aenderung(
                     {"lnr": lnr, "probe": probe}, kuerzel,
                     trdfexport.ROHWERT, am_anhang, trdf.zahl(zeile)))
+        return gefunden
+
+    def ergebnis_angleichung(self) -> list:
+        """Die berechneten Groessen, die im LIMS anders stehen - oder gar nicht.
+
+        Solange eine Serie im LIMS noch nicht gerechnet ist, steht in der
+        Ergebnistabelle ueberall x. Hier wird daraus, was das Pruefmodul
+        mit denselben Formeln rechnet. Nur wo es etwas zu rechnen gab:
+        eine Groesse ohne Ergebnis (fehlender Rohwert) bleibt, wie sie
+        ist - ausser einem grossen X, das zum kleinen x wird.
+        """
+        gefunden = []
+        for lnr, probe in sorted(self.proben, key=lambda p: (p[1], p[0])):
+            eckdaten = {"lnr": lnr, "probe": probe}
+            ergebnis = self.gerechnet(probe)
+            for kuerzel in self.folge:
+                neu = ergebnis.get(kuerzel)
+                alt = self.gebucht.get(probe, {}).get(kuerzel)
+                if not isinstance(neu, trdf.D):
+                    if trdf.ist_grosses_x(alt):
+                        gefunden.append(self._aenderung(
+                            eckdaten, kuerzel, trdfexport.BERECHNET, alt,
+                            trdf.MARKE))
+                    continue
+                if not trdfexport.bewegt(alt, neu):
+                    continue
+                gefunden.append(self._aenderung(eckdaten, kuerzel,
+                                                trdfexport.BERECHNET, alt,
+                                                neu))
         return gefunden
 
     def rohblatt(self) -> list:

@@ -504,6 +504,16 @@ class TrdfSeite(tk.Frame, TrdfModell):
                       height=28, bg="#334155",
                       command=self._ergebnisblatt_speichern).pack(side="left")
         self._infoknopf(leiste, self._ergebnislegende_zeigen)
+        self.knopf_ergebnisse_angleichen = RoundedButton(
+            leiste, text="Ergebnisse angleichen", width=190, height=28,
+            bg="#a16207", command=self._ergebnisse_angleichen)
+        self.knopf_ergebnisse_angleichen.pack(side="left", padx=(8, 0))
+        ToolTip(self.knopf_ergebnisse_angleichen,
+                "Schreibt die hier berechneten Groessen in die\n"
+                "Ergebniszeilen des LIMS - dort, wo noch nichts steht\n"
+                "(x) oder etwas anderes; ein grosses X wird zum kleinen.\n"
+                "Vorher kommt dieselbe Uebersicht wie beim Export, und\n"
+                "der alte Stand wird gesichert. Rohwerte bleiben.")
         self.info_ergebnis = Infozeichen(leiste, erklaerung(
             "Je Groesse zwei Spalten: was das LIMS gebucht hat "
             "und was das Pruefmodul aus denselben Formeln rechnet - "
@@ -1073,6 +1083,8 @@ class TrdfSeite(tk.Frame, TrdfModell):
 
     # ------------------------------------------------------------ Rechnen
     def _von_hand_geaendert(self, zeile, spalte, wert):
+        # Ein getipptes X wird ein x - das ist die Schreibweise hier.
+        wert = trdf.marke_klein(wert)
         self.vonhand[(zeile, spalte)] = wert
         if spalte == trdfrohpruefung.VARIANTE:
             self._variante_wirkt(zeile, wert)
@@ -1178,6 +1190,8 @@ class TrdfSeite(tk.Frame, TrdfModell):
         dreihundertmal dieselbe Arbeit; hier wird alles uebernommen und
         danach ein einziges Mal gerechnet und gezeichnet.
         """
+        gesetzt = [(zeile, spalte, trdf.marke_klein(wert))
+                   for zeile, spalte, wert in gesetzt]
         for zeile, spalte, wert in gesetzt:
             self.vonhand[(zeile, spalte)] = wert
             for tabelle in self.rohtabellen:
@@ -1558,6 +1572,32 @@ class TrdfSeite(tk.Frame, TrdfModell):
             return
         Exportvorschau(self, geaendert, self.v_serie.get().strip(),
                        lambda: self._wirklich_schreiben(geaendert))
+
+    def _ergebnisse_angleichen(self):
+        """Die berechneten Groessen in das LIMS - nach derselben Uebersicht.
+
+        Gerechnet wird mit den Rohwerten, wie sie im LIMS (oder in der
+        eingefuegten UM) stehen. Von Hand geaenderte Rohwerte gehoeren
+        zuerst ueber "Export" in das LIMS - sonst stuenden dort Ergebnisse
+        aus Rohwerten, die es dort nicht gibt.
+        """
+        zugang = self._zugang_holen()
+        if zugang is None:
+            self._melden("Erst anmelden.", Style.WARN)
+            return
+        if self.vonhand:
+            self._melden("Es gibt von Hand geaenderte Rohwerte - die "
+                         "zuerst ueber \u201eExport\u201c schreiben, dann "
+                         "die Ergebnisse angleichen.", Style.WARN)
+            return
+        geaendert = self.ergebnis_angleichung()
+        if not geaendert:
+            self._melden("Die Ergebnisse im LIMS stimmen mit den "
+                         "berechneten ueberein.", Style.TEXT)
+            return
+        Exportvorschau(self, geaendert, self.v_serie.get().strip(),
+                       lambda: self._wirklich_schreiben(geaendert),
+                       nur_ergebnisse=True)
 
     def _anhang_angleichen(self):
         """Den Teilprobenanhang auf den Stand der Ergebniszeile bringen.
@@ -2080,10 +2120,11 @@ class Exportvorschau(tk.Toplevel):
     """
 
     def __init__(self, eltern, aenderungen, serie: str, wenn_ja,
-                 zurueck=False, nur_anhang=False):
+                 zurueck=False, nur_anhang=False, nur_ergebnisse=False):
         super().__init__(eltern)
         self.title(("Load backup - " if zurueck
                     else "Teilprobenanhang angleichen - Serie " if nur_anhang
+                    else "Ergebnisse angleichen - Serie " if nur_ergebnisse
                     else "Export in das LIMS - Serie ") + serie)
         self.configure(bg=Style.BG)
         self.geometry("1180x580")
@@ -2094,7 +2135,8 @@ class Exportvorschau(tk.Toplevel):
                             f"ueberschrieben", bg=Style.BG, fg=Style.TEXT,
                  font=Style.font(12, "bold"), anchor="w").pack(
             fill="x", padx=16, pady=(14, 2))
-        hinweis = vorschauhinweis(self.aenderungen, zurueck, nur_anhang)
+        hinweis = vorschauhinweis(self.aenderungen, zurueck, nur_anhang,
+                                  nur_ergebnisse)
         wieder = [] if zurueck or nur_anhang else trdfexport.schon_korrigiert(
             self.aenderungen)
         tk.Label(self, text=hinweis, bg=Style.BG, fg=Style.MUTED,

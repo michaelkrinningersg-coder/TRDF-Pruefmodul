@@ -13,6 +13,8 @@ Die Bilder zeigen die Beispielserie 2026B051 mit erfundenen Werten.
 
 ![Anmeldung](docs/bilder/01_anmeldung.png)
 
+**Meldung DPY-3015 (Passwort im alten Format):** Das Passwort dieses Kontos ist in der Datenbank noch im alten Oracle-10g-Format gespeichert. Das Programm meldet sich dann wie das LIMS über den Oracle Client unter `C:\Oracle\11.2.0` an (x86-exe). Lässt sich der Client nicht laden, kommt die Meldung: neues Passwort setzen lassen und neu anmelden – oder mit einem anderen Account anmelden.
+
 ## 2. Serie abfragen
 
 1. **Serie** aus der Liste wählen oder eintippen.
@@ -80,6 +82,8 @@ Die Tastenkürzel stehen auch im grauen **i** neben den Knöpfen der Rohwerte.
 
 „Leer“ heißt: Es steht wirklich nichts da. Ein `x` bedeutet „hier soll nichts stehen“ und wird von Strg+L und Strg+E nicht überschrieben.
 
+Großes `X` und kleines `x` gelten beim Vergleich immer als dasselbe. Geschrieben wird das kleine `x` – ein getipptes `X` wird zu `x`.
+
 ### Spalte Variante (`_TRDV`)
 
 | Eingabe | Wirkung in der Zeile |
@@ -94,8 +98,9 @@ Wird eine Variante mit Strg+Shift+D nach unten kopiert, wirkt sie in jeder Zeile
 
 Ein **Klick auf die Probennummer** öffnet den Block der Probe als eigenes Fenster.
 * Links die Probe im Boden: Feinboden, gewogener Grobboden 2–63 mm, geschätzter Grobboden > 63 mm.
-* Rechts die Schaufelprobe nach Volumen.
+* Rechts die Schaufelprobe nach Volumen – nur, wenn ihre Masse weder 0 noch `x` ist.
 * In der Mitte die Zahlen, aus denen gerechnet wird.
+* Darunter die Legende: je Lage eine Zeile, die Prozente untereinander. Dieselbe Lage steht bei Probe und Schaufelprobe in derselben Zeile.
 
 Der Block **rechnet bei jeder Eingabe live mit**. **Pfeil hoch/runter** blättert zur nächsten Probe.
 
@@ -167,6 +172,14 @@ Darüber stehen Serie, Zeitpunkt, Anzahl und der Pfad der Sicherung. **Bericht a
 
 ![Exportbericht](docs/bilder/12_exportbericht.png)
 
+### Ergebnisse angleichen
+
+Ist eine Serie im LIMS noch nicht gerechnet, steht im Reiter **Ergebnisse** in der Spalte LIMS überall `x`. **Ergebnisse angleichen** schreibt die im Prüfmodul berechneten Größen in die Ergebniszeilen des LIMS – dort, wo noch nichts oder etwas anderes steht. Ein großes `X` wird dabei zum kleinen `x`. Rohwerte und Teilprobenanhang bleiben, wie sie sind.
+
+Wie beim Export kommt zuerst die **Übersicht** zur Bestätigung, dann die **Sicherung** in `trdf_backup`; jede UPDATE-Anweisung wird protokolliert, danach wird nachgelesen. Gibt es noch von Hand geänderte Rohwerte, erst über **Export** schreiben, dann angleichen.
+
+**Anhang angleichen** (Reiter Rohwerte) bringt umgekehrt den Teilprobenanhang auf den Stand der Ergebniszeile; auch dort wird ein großes `X` zum kleinen `x`.
+
 ### Rückgängig machen
 
 **Load backup** klicken und die Datei aus `trdf_backup` wählen. Dieselbe Übersicht zeigt jetzt den umgekehrten Weg: „Wert neu“ ist der Stand von vor der Korrektur. **Zurueckspielen** stellt Ergebniszeile und Teilprobenanhang wieder her.
@@ -183,5 +196,6 @@ Darüber stehen Serie, Zeitpunkt, Anzahl und der Pfad der Sicherung. **Bericht a
 
   Gespeichert wird in `einstellungen\` neben der exe; beim nächsten Start ist alles wieder da. Ebenso gemerkt werden die zuletzt abgefragte Serie und ob die berechneten Größen aufgeklappt sind.
 
+* **Variante x ausblenden** (in Rohwerte, Ergebnisse und Pruefung, von Haus aus aus) lässt die Proben weg, deren Variante `x` ist. Das betrifft nur die Anzeige – beim Export werden auch Änderungen an ausgeblendeten Proben geschrieben.
 * Die blauen **i** erklären, was eine Tabelle zeigt; das graue **i** listet die Tastenkürzel.
 * Als CSV ablegen lassen sich **Rohwertblatt**, **Aenderungen**, **Ergebnisblatt**, das **Blatt** im Reiter Pruefung und der **Bericht**. Ablage im Ordner `TRDF-Pruefung` bzw. `trdf_backup` neben der exe.

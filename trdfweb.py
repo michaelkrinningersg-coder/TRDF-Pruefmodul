@@ -459,7 +459,9 @@ class Api:
             proben, gesetzt, varianten = [], 0, 0
             for probe, kuerzel, wert in zellen or ():
                 probe, kuerzel = str(probe), str(kuerzel)
-                wert = str(wert if wert is not None else "").strip()
+                # Ein X wird ein x - das ist die Schreibweise hier.
+                wert = trdf.marke_klein(
+                    str(wert if wert is not None else "").strip())
                 if kuerzel not in s.rohliste:
                     continue
                 s.vonhand[(probe, kuerzel)] = wert
@@ -604,20 +606,22 @@ class Api:
     def _vorschau(self, art, geaendert, titel, pfad="") -> dict:
         self._s.vorschau = (art, list(geaendert), pfad)
         zurueck, nur_anhang = art == "zurueck", art == "anhang"
+        nur_ergebnisse = art == "ergebnisse"
         wieder = {id(eine) for eine in (
             [] if zurueck or nur_anhang
             else trdfexport.schon_korrigiert(geaendert))}
         zeilen = trdfexport.uebersicht(geaendert, trdfpruefung.stellen_fuer)
         return {"vorschau": {
             "art": art, "titel": titel, "anzahl": len(geaendert),
-            "hinweis": vorschauhinweis(geaendert, zurueck, nur_anhang),
+            "hinweis": vorschauhinweis(geaendert, zurueck, nur_anhang,
+                                       nur_ergebnisse),
             "spalten": list(trdfexport.SPALTEN),
             "zeilen": zeilen,
             "marken": ["ohne" if not eine.get("zeile")
                        else "wieder" if id(eine) in wieder else ""
                        for eine in geaendert],
             "knopf": ("Zurueckspielen" if zurueck
-                      else "Angleichen" if nur_anhang
+                      else "Angleichen" if nur_anhang or nur_ergebnisse
                       else "Sichern und schreiben")}}
 
     def export_vorschau(self) -> dict:
@@ -645,6 +649,31 @@ class Api:
             return self._vorschau("anhang", geaendert,
                                   "Teilprobenanhang angleichen - Serie "
                                   + self._s.seriename())
+        return self._sicher(arbeit)
+
+    def ergebnisse_vorschau(self) -> dict:
+        """Die berechneten Groessen in die Ergebniszeilen des LIMS.
+
+        Fuer Serien, die im LIMS noch nicht gerechnet sind (dort steht
+        ueberall x). Handwerte gehoeren vorher ueber den Export in das
+        LIMS - sonst stuenden dort Ergebnisse aus Rohwerten, die es dort
+        nicht gibt.
+        """
+        def arbeit():
+            self._zugang()
+            s = self._s
+            if s.vonhand:
+                return {"stand": _stand(
+                    "Es gibt von Hand geaenderte Rohwerte - die zuerst ueber "
+                    "\u201eExport\u201c schreiben, dann die Ergebnisse "
+                    "angleichen.", "warn")}
+            geaendert = s.ergebnis_angleichung()
+            if not geaendert:
+                return {"stand": _stand("Die Ergebnisse im LIMS stimmen mit "
+                                        "den berechneten ueberein.")}
+            return self._vorschau("ergebnisse", geaendert,
+                                  "Ergebnisse angleichen - Serie "
+                                  + s.seriename())
         return self._sicher(arbeit)
 
     def backup_waehlen(self) -> dict:
@@ -716,7 +745,7 @@ class Api:
                 raise Hinweis("Es liegt keine Uebersicht vor.")
             art, geaendert, pfad = vorgemerkt
             zugang = self._zugang()
-            if art == "export":
+            if art in ("export", "ergebnisse"):
                 return self._exportieren(zugang, geaendert)
             if art == "zurueck":
                 return self._zurueckspielen(zugang, geaendert, pfad)
