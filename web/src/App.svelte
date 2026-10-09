@@ -48,6 +48,12 @@
   let oberstes = $state(30);
   let blockNummer = 0; // fester Schluessel je Blockfenster
 
+  // Haken "angleichen": nach dem Abfragen gleich Anhang und Ergebnisse
+  // pruefen - die Uebersicht kommt nur, wo es Unterschiede gibt.
+  let autoAngleichen = $state(false);
+  let autoSchritte = [];
+  let autoNachMeldung = false;
+
   let laeuft = $state(0);
   let einfuegen = $state(null);
   let vorschau = $state(null);
@@ -129,6 +135,7 @@
     start = antwort;
     serie = antwort.serie ?? "";
     berechneteOffen = antwort.berechnete === "an";
+    autoAngleichen = !!antwort.auto_angleichen;
     if (antwort.angemeldet) {
       angemeldet = true;
       uebernehmen(await rufe("zustand"));
@@ -155,12 +162,26 @@
   }
 
   // ---------------------------------------------------- Serie, Methode
+  // Dieselbe Serie nicht zweimal zugleich abfragen: Verlassen des Feldes
+  // (change) und der Klick auf "Abfragen" kommen sonst beide an.
+  let abfrageLaeuft = "";
+
   async function abfragen() {
     const name = serie.trim();
     if (!name) {
       stand = { text: "Erst eine Serie wählen.", art: "warn" };
       return;
     }
+    if (abfrageLaeuft === name) return;
+    abfrageLaeuft = name;
+    try {
+      await abfragenFuer(name);
+    } finally {
+      abfrageLaeuft = "";
+    }
+  }
+
+  async function abfragenFuer(name) {
     methoden = [];
     methode = "";
     abgefragt = "";
@@ -195,7 +216,31 @@
       bloecke = [];
       arbeitszeile = null;
       uebernehmen(antwort);
+      autoSchritte = autoAngleichen ? ["anhang", "ergebnisse"] : [];
+      if (autoSchritte.length) await autoWeiter();
     }
+  }
+
+  // Der naechste Schritt des Angleichens: erst der Anhang, dann die
+  // Ergebnisse. Wo es nichts gibt, geht es gleich weiter; wo es etwas
+  // gibt, kommt die gewohnte Uebersicht. "Abbrechen" beendet das Ganze.
+  async function autoWeiter() {
+    while (autoSchritte.length) {
+      const schritt = autoSchritte.shift();
+      const antwort = await rufe(schritt === "anhang" ? "anhang_vorschau" : "ergebnisse_vorschau");
+      if (antwort?.vorschau) {
+        vorschau = antwort.vorschau;
+        return;
+      }
+    }
+    stand = {
+      text: (stand.text ? stand.text + "  |  " : "") + "Angleichen: keine Unterschiede",
+      art: stand.art,
+    };
+  }
+
+  function autoMerken() {
+    rufe("einstellung", "trdf_auto_angleichen", autoAngleichen ? "an" : "aus");
   }
 
   // ----------------------------------------------------------- Aendern
@@ -378,10 +423,24 @@
       return;
     }
     uebernehmen(antwort);
+    // Beim Angleichen nach dem Abfragen: der naechste Schritt, sobald die
+    // Meldung zu ist.
+    if (autoSchritte.length) {
+      if (meldung) autoNachMeldung = true;
+      else await autoWeiter();
+    }
   }
   function vorschauZu() {
     vorschau = null;
+    autoSchritte = [];
     rufe("vorschau_abbrechen");
+  }
+  function meldungZu() {
+    meldung = null;
+    if (autoNachMeldung) {
+      autoNachMeldung = false;
+      autoWeiter();
+    }
   }
 
   // ------------------------------------------------------ Blaetter, Bild
@@ -511,6 +570,9 @@
           </datalist>
         </label>
         <button class="knopf primaer" onclick={abfragen} type="button">Abfragen</button>
+        <label class="schalter auto" title="Nach dem Abfragen gleich angleichen: erst den Teilprobenanhang, dann die Ergebnisse – nur wo es Unterschiede gibt, mit der gewohnten Übersicht, Sicherung und Protokoll.">
+          <input type="checkbox" bind:checked={autoAngleichen} onchange={autoMerken} /> angleichen
+        </label>
         <label class="gruppe">
           <span class="beschriftung">Untersuchungsmethode</span>
           <select class="feld methode" bind:value={methode} onchange={laden} disabled={!methoden.length}>
@@ -765,7 +827,7 @@
   </Dialog>
 {/if}
 {#if meldung}
-  <Meldung {meldung} onZu={() => (meldung = null)} />
+  <Meldung {meldung} onZu={meldungZu} />
 {/if}
 
 <style>
@@ -891,6 +953,10 @@
   }
   .methode {
     width: 200px;
+  }
+  .schalter.auto {
+    align-self: center;
+    margin: 18px 6px 0 -2px;
   }
   .quelle {
     align-self: center;

@@ -3031,6 +3031,81 @@ def test_gross_und_klein_x_gelten_beim_vergleich_gleich():
     werte = {"_TRDV": "1", "GMSZ": "X"}
     assert "GMSZ" not in trdfrohpruefung.nach_variante(werte, "x")
 
+# ------------------------------------------------ Gleich angleichen
+
+def _vorschauen(fenster):
+    return [kind for kind in fenster.winfo_children()
+            for kind in [kind] + kind.winfo_children()
+            if isinstance(kind, trdfreiter.Exportvorschau)]
+
+
+def test_angleichen_nach_dem_abfragen_ist_von_haus_aus_aus():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        assert not blatt.v_auto_angleichen.get()
+        blatt._auto_angleichen_vormerken()
+        assert blatt._auto_schritte == []
+    mit_fenster(pruefen)
+
+
+def test_angleichen_nach_dem_abfragen_zeigt_erst_den_anhang():
+    """Angehakt: nach dem Abruf kommt gleich die Uebersicht - erst der
+    Anhang, und nur, wo es Unterschiede gibt."""
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        blatt.v_auto_angleichen.set(True)
+        blatt._auto_angleichen_vormerken()
+        blatt.anhang[("26B0011", "DichteGB")]["mw"] = "2,9"
+        blatt._auto_angleichen()
+        vorschauen = _vorschauen(fenster)
+        assert len(vorschauen) == 1
+        assert "Teilprobenanhang" in vorschauen[0].title()
+        # Die Ergebnisse kommen danach - nach dem Schreiben und Neuladen.
+        assert blatt._auto_schritte == ["ergebnisse"]
+        # Abbrechen beendet das Angleichen.
+        vorschauen[0]._abbrechen()
+        assert blatt._auto_schritte == []
+    mit_fenster(pruefen)
+
+
+def test_angleichen_nach_dem_abfragen_dann_die_ergebnisse():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        blatt.v_auto_angleichen.set(True)
+        blatt._auto_angleichen_vormerken()
+        _noch_nicht_gerechnet(blatt)
+        blatt._auto_angleichen()
+        vorschauen = _vorschauen(fenster)
+        assert len(vorschauen) == 1
+        assert vorschauen[0].title().startswith("Ergebnisse angleichen")
+        vorschauen[0]._abbrechen()
+    mit_fenster(pruefen)
+
+
+def test_angleichen_ohne_unterschiede_sagt_es_nur():
+    def pruefen(fenster):
+        blatt = seite(fenster, zeilen=(11,))
+        for kuerzel in blatt.folge:
+            wert = blatt.gerechnet("26B0011").get(kuerzel)
+            blatt.gebucht.setdefault("26B0011", {})[kuerzel] = (
+                str(wert).replace(".", ",") if isinstance(wert, D) else "x")
+        blatt.v_auto_angleichen.set(True)
+        blatt._auto_angleichen_vormerken()
+        blatt._auto_angleichen()
+        assert _vorschauen(fenster) == []
+        assert "keine Unterschiede" in blatt.stand.cget("text")
+    mit_fenster(pruefen)
+
+
+def test_der_haken_wird_gemerkt():
+    def pruefen(fenster):
+        with tempfile.TemporaryDirectory() as basis:
+            blatt = seite(fenster, zeilen=(11,), ordner=basis)
+            blatt.v_auto_angleichen.set(True)
+            blatt._auto_angleichen_merken()
+            assert blatt._einstellungen().get("trdf_auto_angleichen") == "an"
+    mit_fenster(pruefen)
+
 def test_eine_alte_sicherung_ohne_rohw_id_wird_angesagt():
     """Sie stellt nur die Ergebniszeile zurueck - der Anhang bliebe auf
     dem korrigierten Wert stehen, und niemand saehe es."""

@@ -544,6 +544,9 @@ def test_anhang_angleichen_macht_ein_grosses_x_ueberall_klein():
 def test_nur_bekannte_einstellungen():
     bruecke = api()
     assert bruecke.einstellung("trdf_berechnete", "an")["ok"]
+    assert bruecke.start()["auto_angleichen"] is False
+    assert bruecke.einstellung("trdf_auto_angleichen", "an")["ok"]
+    assert bruecke.start()["auto_angleichen"] is True
     assert "Unbekannte" in bruecke.einstellung("passwort", "x")["fehler"]
 
 

@@ -326,6 +326,8 @@ class Api:
                     "datenbanken": list(lims_db.DATENBANKEN),
                     "serie": str(konfig.get("serie") or ""),
                     "berechnete": str(konfig.get("trdf_berechnete") or "aus"),
+                    "auto_angleichen": str(konfig.get("trdf_auto_angleichen")
+                                           or "aus") == "an",
                     "tnsnames": tns, "demo": self._demo,
                     "angemeldet": self._s.zugang is not None}
         return self._sicher(arbeit)
@@ -1163,7 +1165,7 @@ class Api:
     # ------------------------------------------------------- Einstellungen
     def einstellung(self, name: str, wert) -> dict:
         """Merkt sich eine Wahl der Seite - nur was die Seite selbst fuehrt."""
-        if name not in ("trdf_berechnete",):
+        if name not in ("trdf_berechnete", "trdf_auto_angleichen"):
             return {"fehler": f"Unbekannte Einstellung {name}"}
 
         def arbeit():
@@ -1200,7 +1202,9 @@ def demo_methoden(serie: str) -> list:
 def demo_abruf(serie, um_id, kuerzel, proben=None) -> dict:
     """Die Beispielserie der Pruefungen - auf Wunsch vervielfacht.
 
-    TRDF_DEMO_PROBEN gibt die Zahl der Proben vor (Vorgabe 24). Die
+    TRDF_DEMO_PROBEN gibt die Zahl der Proben vor (Vorgabe 24);
+    TRDF_DEMO_UNGERECHNET=1 laesst die berechneten Groessen im "LIMS"
+    leer, wie bei einer Serie, die dort noch nicht gerechnet ist. Die
     ersten vier sind die Proben aus test_trdf, so wie sie sind - mit
     ihren Befunden. Die uebrigen wiederholen sie mit leicht
     verschobenen Messwerten, und das LIMS hat fuer sie richtig
@@ -1245,7 +1249,14 @@ def demo_abruf(serie, um_id, kuerzel, proben=None) -> dict:
                 roh[name] = trdf.zahl(kopie["mw_roh"])
             zeilen.append((name, kopie))
         wgh[neu] = grund["wgh"].get(alt)
-        if nummer >= 4:
+        if nummer >= 4 and os.environ.get("TRDF_DEMO_UNGERECHNET"):
+            # Wie eine Serie, die im LIMS noch nicht gerechnet ist: in den
+            # berechneten Groessen steht x - hier und da ein grosses X.
+            for name, kopie in zeilen:
+                if name in formeln:
+                    kopie["mw_roh"] = kopie["mw"] = "X" if nummer % 5 == 0 \
+                        else "x"
+        elif nummer >= 4:
             gerechnet = trdf.rechnen(roh, formeln, trdf.zahl(wgh[neu]), folge)
             for name, kopie in zeilen:
                 if name in formeln:

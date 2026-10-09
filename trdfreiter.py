@@ -248,10 +248,27 @@ class TrdfSeite(tk.Frame, TrdfModell):
                 "Die Serien aus dem Fahrplan, die eine TRDF-Methode "
                 "fuehren.\nEine andere laesst sich eintippen - sie muss "
                 "nicht im Fahrplan stehen.")
+        abfrage = tk.Frame(wahl, bg=Style.CARD)
+        abfrage.grid(row=0, column=2, sticky="w", padx=(0, 16))
         self.knopf_abfragen = RoundedButton(
-            wahl, text="Abfragen", width=120, height=30, bg="#15803d",
+            abfrage, text="Abfragen", width=120, height=30, bg="#15803d",
             command=self._abfragen)
-        self.knopf_abfragen.grid(row=0, column=2, sticky="w", padx=(0, 16))
+        self.knopf_abfragen.pack(side="left")
+        # Nach dem Abfragen gleich angleichen: Anhang, dann Ergebnisse -
+        # jeweils nur, wo es Unterschiede gibt, und nach der Uebersicht.
+        self.v_auto_angleichen = tk.BooleanVar(
+            value=self._gemerkt("trdf_auto_angleichen") == "an")
+        self.schalter_auto_angleichen = ttk.Checkbutton(
+            abfrage, variable=self.v_auto_angleichen, text="angleichen",
+            command=self._auto_angleichen_merken)
+        self.schalter_auto_angleichen.pack(side="left", padx=(8, 0))
+        ToolTip(self.schalter_auto_angleichen,
+                "Nach dem Abfragen gleich angleichen: erst den\n"
+                "Teilprobenanhang, dann die Ergebnisse - aber nur, wo\n"
+                "es Unterschiede gibt. Die Unterschiede stehen in der\n"
+                "gewohnten Uebersicht; geschrieben wird erst nach der\n"
+                "Bestaetigung, mit Sicherung und Protokoll.")
+        self._auto_schritte = []
         ToolTip(self.knopf_abfragen,
                 "Fragt, welche Untersuchungsmethoden diese Serie fuehrt,\n"
                 "und bietet alle an, deren Kuerzel TRDF traegt. Ist es\n"
@@ -940,6 +957,7 @@ class TrdfSeite(tk.Frame, TrdfModell):
         if not serie or zugang is None:
             self._melden("Erst anmelden und eine Serie waehlen.", Style.WARN)
             return
+        self._auto_angleichen_vormerken()
         self._methoden_leeren("wird abgefragt ...")
         self._melden(f"Die Untersuchungsmethoden der Serie {serie} werden "
                      f"abgefragt ...")
@@ -985,7 +1003,56 @@ class TrdfSeite(tk.Frame, TrdfModell):
 
     def _methode_gewaehlt(self):
         self._methodenfeld_freigeben()
+        self._auto_angleichen_vormerken()
         self._abrufen()
+
+    # ------------------------------------------- Gleich angleichen
+    def _auto_angleichen_merken(self):
+        konfig = self._einstellungen()
+        konfig.set("trdf_auto_angleichen",
+                   "an" if self.v_auto_angleichen.get() else "aus")
+        konfig.speichern()
+
+    def _auto_angleichen_vormerken(self):
+        """Eine Abfrage durch den Anwender - danach angleichen, wenn gewollt."""
+        self._auto_schritte = (["anhang", "ergebnisse"]
+                               if self.v_auto_angleichen.get() else [])
+
+    def _auto_angleichen(self):
+        """Der naechste Schritt des Angleichens nach dem Abfragen.
+
+        Erst der Anhang, dann die Ergebnisse. Wo es nichts anzugleichen
+        gibt, geht es gleich weiter; wo es etwas gibt, kommt die gewohnte
+        Uebersicht. Nach dem Schreiben des Anhangs wird die Serie neu
+        geholt - danach kommen die Ergebnisse dran. "Abbrechen" beendet
+        das Angleichen.
+        """
+        while self._auto_schritte:
+            schritt = self._auto_schritte.pop(0)
+            serie = self.v_serie.get().strip()
+            if schritt == "anhang":
+                geaendert = self.auseinander()
+                if geaendert:
+                    Exportvorschau(self, geaendert, serie,
+                                   lambda: self._anhang_schreiben(geaendert),
+                                   nur_anhang=True,
+                                   wenn_nein=self._auto_abbrechen)
+                    return
+            elif schritt == "ergebnisse" and not self.vonhand:
+                geaendert = self.ergebnis_angleichung()
+                if geaendert:
+                    Exportvorschau(self, geaendert, serie,
+                                   lambda: self._wirklich_schreiben(geaendert),
+                                   nur_ergebnisse=True,
+                                   wenn_nein=self._auto_abbrechen)
+                    return
+            if not self._auto_schritte:
+                text = self.stand.cget("text")
+                self._melden((text + "  |  " if text else "")
+                             + "Angleichen: keine Unterschiede", Style.TEXT)
+
+    def _auto_abbrechen(self):
+        self._auto_schritte = []
 
     def _methodenfeld_freigeben(self):
         """Fokus und Markierung weg vom Methodenfeld.
@@ -1048,6 +1115,8 @@ class TrdfSeite(tk.Frame, TrdfModell):
         self._legende_stellen()
         self._quelle_zeigen()
         self._zeigen()
+        if self._auto_schritte:
+            self.after_idle(self._auto_angleichen)
 
     # -------------------------------------------------------- Einfuegetext
     def _text_leeren(self):
@@ -2152,7 +2221,8 @@ class Exportvorschau(tk.Toplevel):
     """
 
     def __init__(self, eltern, aenderungen, serie: str, wenn_ja,
-                 zurueck=False, nur_anhang=False, nur_ergebnisse=False):
+                 zurueck=False, nur_anhang=False, nur_ergebnisse=False,
+                 wenn_nein=None):
         super().__init__(eltern)
         self.title(("Load backup - " if zurueck
                     else "Teilprobenanhang angleichen - Serie " if nur_anhang
@@ -2221,14 +2291,21 @@ class Exportvorschau(tk.Toplevel):
 
         knoepfe = tk.Frame(self, bg=Style.BG)
         knoepfe.pack(fill="x", padx=16, pady=12)
+        self._wenn_nein = wenn_nein
         RoundedButton(knoepfe, text="Abbrechen", width=130, height=32,
-                      bg="#6b7268", command=self.destroy).pack(side="right")
+                      bg="#6b7268", command=self._abbrechen).pack(side="right")
+        self.protocol("WM_DELETE_WINDOW", self._abbrechen)
         self.knopf_ja = RoundedButton(
             knoepfe, text="Zurueckspielen" if zurueck
             else "Sichern und schreiben", width=210, height=32,
             bg="#15803d", command=self._schreiben)
         self.knopf_ja.pack(side="right", padx=(0, 10))
-        self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<Escape>", lambda e: self._abbrechen())
+
+    def _abbrechen(self):
+        self.destroy()
+        if self._wenn_nein is not None:
+            self._wenn_nein()
 
     def _schreiben(self):
         self.destroy()
